@@ -1,0 +1,198 @@
+# ==========================================================
+#  Miniony - konfiguracja
+#  Wszystkie teksty używają formatu MiniMessage:
+#  https://docs.advntr.dev/minimessage/format.html
+# ==========================================================
+
+# Wersja pliku konfiguracyjnego - nie zmieniaj ręcznie.
+wersja-configu: 1
+
+baza-danych:
+  # Nazwa pliku bazy SQLite w folderze pluginu.
+  plik: 'miniony.db'
+  # Co ile sekund zapisywać zmienione miniony (praca, zmiana magazynu przez pracę).
+  # Akcje graczy (stawianie, zbieranie, odbieranie itemów) zapisywane są natychmiast.
+  autozapis-sekundy: 30
+
+praca:
+  # Co ile ticków (20 ticków = 1 sekunda) scheduler sprawdza, które miniony mają wykonać cykl pracy.
+  # Każdy minion pracuje według własnego interwału z sekcji "typy".
+  takt-tickow: 20
+
+wyspy:
+  # Gdy SuperiorSkyblock2 jest zainstalowany: miniona można postawić tylko na wyspie,
+  # której gracz jest członkiem. Gdy SSB2 nie ma na serwerze, to ustawienie jest ignorowane.
+  wymagaj-wyspy: true
+  # Czy członkowie wyspy (nie tylko właściciel miniona) mogą otwierać GUI i odbierać itemy.
+  dostep-czlonkow: true
+  # Czy zmiany bloków wykonywane przez miniony mają być zgłaszane do SSB2 (liczniki bloków / wartość wyspy).
+  aktualizuj-bloki-wyspy: true
+
+limity:
+  # Domyślny limit postawionych minionów na gracza (gdy nie ma permisji miniony.limit.<liczba>).
+  domyslny: 3
+  # Twardy sufit - żadna permisja miniony.limit.<liczba> nie da więcej niż ta wartość.
+  maksimum: 50
+  # Czy permisja miniony.limit.bypass ignoruje także twardy sufit.
+  bypass-ignoruje-maksimum: true
+
+zbieranie:
+  # Przy zbieraniu miniona przenieś zawartość jego magazynu do ekwipunku gracza.
+  # To, co się nie zmieści, zostaje w magazynie miniona (zapisane razem z nim) - nic nie wypada na ziemię.
+  oddaj-magazyn: true
+
+hologram:
+  wlaczony: true
+  # Wysokość hologramu nad podstawą miniona (w blokach).
+  wysokosc: 1.35
+  # Dostępne zmienne: <typ>, <poziom>, <rzadkosc>, <wlasciciel>, <zapelnienie>, <pojemnosc>, <status>
+  linie:
+    - '<gold><typ> <gray>[<white>Poz. <poziom></white>]'
+    - '<gray>Właściciel: <white><wlasciciel>'
+    - '<gray>Magazyn: <white><zapelnienie>/<pojemnosc></white>'
+    - '<status>'
+  status:
+    pracuje: '<green>Pracuje'
+    pelny: '<red>Magazyn pełny'
+    brak-miejsca: '<yellow>Brak miejsca do pracy'
+    oczekuje: '<gray>Oczekuje'
+
+# Nazwy rzadkości (w Etapie 3 rozbudowane o mnożniki).
+rzadkosci:
+  ZWYKLY:
+    nazwa: '<gray>Zwykły'
+
+# Typy minionów. Klucz sekcji to identyfikator typu używany w komendach.
+typy:
+  gornik:
+    wlaczony: true
+    nazwa: 'Górnik'
+    # Co ile sekund minion wykonuje jeden cykl pracy (postawienie albo wykopanie bloku).
+    interwal-sekundy: 15
+    # Zasięg pracy w blokach wokół miniona (1 = obszar 3x3, 2 = 5x5, ...). Pracuje na poziomie pod sobą.
+    zasieg: 2
+    # Pojemność magazynu w slotach (1-270).
+    pojemnosc: 9
+    # Blok, który minion stawia i wykopuje.
+    blok: COBBLESTONE
+    # Narzędzie trzymane przez miniona (wpływa na drop bloku).
+    narzedzie: WOODEN_PICKAXE
+    wyglad:
+      # Tekstura głowy (wartość base64 "textures"). Puste = zwykła głowa gracza.
+      glowa-tekstura: ''
+      # Kolor skórzanej zbroi w formacie #RRGGBB.
+      kolor-zbroi: '#7F7F7F'
+    item:
+      material: PLAYER_HEAD
+      # Dostępne zmienne: <typ>, <poziom>, <rzadkosc>, <zapelnienie>, <pojemnosc>
+      nazwa: '<gold>Minion: <typ> <gray>[Poz. <poziom>]'
+      lore:
+        - '<gray>Rzadkość: <rzadkosc>'
+        - '<gray>Magazyn: <white><zapelnienie>/<pojemnosc>'
+        - ''
+        - '<yellow>Kliknij prawym na blok wyspy, aby postawić.'
+
+gui:
+  # Dostępne zmienne: <typ>, <poziom>, <strona>, <strony>
+  tytul: '<dark_gray>Minion: <typ> <gray>(<strona>/<strony>)'
+  wypelnienie:
+    material: GRAY_STAINED_GLASS_PANE
+    nazwa: ' '
+  # Linie dopisywane do lore przedmiotów w magazynie.
+  lore-przedmiotu:
+    - ''
+    - '<yellow>Kliknij, aby odebrać.'
+  # Sloty przycisków w ostatnim rzędzie (45-53).
+  przyciski:
+    poprzednia-strona:
+      slot: 45
+      material: ARROW
+      nazwa: '<yellow>Poprzednia strona'
+      lore: []
+    odbierz-wszystko:
+      slot: 48
+      material: HOPPER
+      nazwa: '<green>Odbierz wszystko'
+      lore:
+        - '<gray>Przenosi przedmioty z magazynu'
+        - '<gray>do Twojego ekwipunku.'
+    informacje:
+      slot: 49
+      material: BOOK
+      nazwa: '<gold>Informacje'
+      # Dostępne zmienne: <typ>, <poziom>, <rzadkosc>, <wlasciciel>, <zapelnienie>, <pojemnosc>, <status>, <interwal>, <zasieg>
+      lore:
+        - '<gray>Typ: <white><typ>'
+        - '<gray>Poziom: <white><poziom>'
+        - '<gray>Rzadkość: <rzadkosc>'
+        - '<gray>Właściciel: <white><wlasciciel>'
+        - '<gray>Magazyn: <white><zapelnienie>/<pojemnosc>'
+        - '<gray>Cykl pracy: <white>co <interwal> s'
+        - '<gray>Zasięg: <white><zasieg>'
+        - '<gray>Status: <status>'
+    zbierz-miniona:
+      slot: 50
+      material: BARRIER
+      nazwa: '<red>Zbierz miniona'
+      lore:
+        - '<gray>Zabiera miniona do ekwipunku.'
+        - '<gray>Dostępne tylko dla właściciela.'
+    zamknij:
+      slot: 52
+      material: OAK_DOOR
+      nazwa: '<gray>Zamknij'
+      lore: []
+    nastepna-strona:
+      slot: 53
+      material: ARROW
+      nazwa: '<yellow>Następna strona'
+      lore: []
+
+wiadomosci:
+  brak-uprawnien: '<red> ❌ Nie masz uprawnień do tej komendy.'
+  tylko-gracz: '<red> ❌ Ta komenda jest dostępna tylko dla graczy.'
+  nieznany-gracz: '<red> ❌ Nie znaleziono gracza <gracz>.'
+  gracz-offline: '<red> ❌ Gracz <gracz> musi być online.'
+  nieznany-typ: '<red> ❌ Nieznany typ miniona: <typ>. Dostępne: <typy>.'
+  nieprawidlowa-liczba: '<red> ❌ Nieprawidłowa liczba: <wartosc>.'
+  nieznana-komenda: '<red> ❌ Nieznana komenda. Wpisz /minion pomoc.'
+  uzycie-give: '<red> ❌ Użycie: /minion give <gracz> <typ> [ilość]'
+  przeladowano: '<green> ✔ Przeładowano konfigurację.'
+  przeladowanie-blad: '<red> ❌ Nie udało się przeładować konfiguracji, szczegóły w konsoli.'
+  dano-miniona: '<green> ✔ Dano <ilosc>x miniona <typ> graczowi <gracz>.'
+  otrzymano-miniona: '<green> ✔ Otrzymano <ilosc>x miniona <typ>.'
+  postawiono: '<green> ✔ Postawiono miniona <typ> (<liczba>/<limit>).'
+  zebrano: '<green> ✔ Zebrano miniona <typ>.'
+  zebrano-czesc-magazynu: '<red> ❌ Nie wszystkie przedmioty zmieściły się w ekwipunku, reszta została w magazynie miniona.'
+  limit-osiagniety: '<red> ❌ Osiągnięto limit minionów (<liczba>/<limit>).'
+  nie-twoja-wyspa: '<red> ❌ Miniona możesz postawić tylko na wyspie, której jesteś członkiem.'
+  zajete-miejsce: '<red> ❌ W tym miejscu nie można postawić miniona.'
+  za-blisko: '<red> ❌ W tym miejscu stoi już inny minion.'
+  nieprawidlowy-item: '<red> ❌ Ten przedmiot miniona jest nieważny i został usunięty.'
+  minion-juz-postawiony: '<red> ❌ Ten minion jest już postawiony.'
+  typ-wylaczony: '<red> ❌ Ten typ miniona jest wyłączony.'
+  brak-dostepu: '<red> ❌ To nie jest Twój minion.'
+  tylko-wlasciciel-zbiera: '<red> ❌ Tylko właściciel może zebrać tego miniona.'
+  odebrano-przedmioty: '<green> ✔ Odebrano <ilosc> przedmiotów.'
+  brak-miejsca-ekwipunek: '<red> ❌ Nie masz miejsca w ekwipunku.'
+  magazyn-pusty: '<red> ❌ Magazyn miniona jest pusty.'
+  minion-niedostepny: '<red> ❌ Ten minion nie jest już dostępny.'
+  zwrocono-miniony: '<green> ✔ Zwrócono Ci <ilosc> minion(ów) z usuniętej wyspy.'
+  ekwipunek-pelny-zwrot: '<red> ❌ Masz pełny ekwipunek. Zwolnij miejsce i wpisz /minion odbierz, aby odebrać <ilosc> minion(ów).'
+  brak-do-odebrania: '<red> ❌ Nie masz minionów do odebrania.'
+  limit-info: '<gray>Miniony gracza <white><gracz></white>: <white><liczba></white>/<white><limit></white>'
+  limit-bez-limitu: 'bez limitu'
+  lista-naglowek: '<gold>Miniony gracza <white><gracz></white> <gray>(<liczba>):'
+  lista-pozycja: '<gray>- <white><typ></white> <gray>poz. <white><poziom></white> <gray>| <white><swiat></white> <gray><x>, <y>, <z>'
+  lista-pusta: '<gray>Gracz <white><gracz></white> nie ma postawionych minionów.'
+  lista-do-odebrania: '<gray>Do odebrania (/minion odbierz): <white><ilosc>'
+  pomoc:
+    - '<gold>Miniony - pomoc'
+    - '<yellow>/minion list <gray>- lista Twoich minionów'
+    - '<yellow>/minion limit <gray>- Twój limit minionów'
+    - '<yellow>/minion odbierz <gray>- odbierz miniony z usuniętej wyspy'
+  pomoc-admin:
+    - '<yellow>/minion give <gracz> <typ> [ilość] <gray>- daj miniona'
+    - '<yellow>/minion list <gracz> <gray>- lista minionów gracza'
+    - '<yellow>/minion limit <gracz> <gray>- limit gracza'
+    - '<yellow>/minion reload <gray>- przeładuj konfigurację'

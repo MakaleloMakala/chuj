@@ -1,0 +1,49 @@
+name: Miniony
+version: '${project.version}'
+main: pl.skyblock.miniony.MinionyPlugin
+api-version: '26.2'
+description: Miniony pracujące na wyspach Skyblock.
+author: Skyblock
+softdepend:
+  - SuperiorSkyblock2
+  - LuckPerms
+  - Vault
+  - Nexo
+
+commands:
+  minion:
+    description: Zarządzanie minionami.
+    usage: /minion pomoc
+    aliases: [miniony]
+
+permissions:
+  miniony.use:
+    description: Podstawowe korzystanie z minionów (stawianie, GUI, /minion list, /minion limit).
+    default: true
+  miniony.admin:
+    description: Dostęp administracyjny do wszystkich minionów i komend.
+    default: op
+    children:
+      miniony.admin.give: true
+      miniony.admin.reload: true
+      miniony.admin.list: true
+      miniony.admin.limit: true
+      miniony.admin.access: true
+  miniony.admin.give:
+    description: /minion give
+    default: op
+  miniony.admin.reload:
+    description: /minion reload
+    default: op
+  miniony.admin.list:
+    description: /minion list <gracz>
+    default: op
+  miniony.admin.limit:
+    description: /minion limit <gracz>
+    default: op
+  miniony.admin.access:
+    description: Otwieranie i zbieranie cudzych minionów.
+    default: op
+  miniony.limit.bypass:
+    description: Brak limitu postawionych minionów.
+    default: op
