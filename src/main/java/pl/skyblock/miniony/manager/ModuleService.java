@@ -467,6 +467,7 @@ public final class ModuleService {
             return;
         }
         minion.modules().add(kind.id());
+        minion.invalidateStats();
         plugin.minions().applyLevelChange(minion);
         player.saveData();
         plugin.minions().storageChangedByPlayer(minion);
@@ -489,6 +490,7 @@ public final class ModuleService {
             return;
         }
         String id = minion.modules().remove(index);
+        minion.invalidateStats();
         ModuleKind kind = ModuleKind.byId(id);
         if (kind == ModuleKind.FUEL) {
             minion.setFuel(null, 0);

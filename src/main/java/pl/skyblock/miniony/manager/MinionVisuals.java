@@ -119,6 +119,8 @@ public final class MinionVisuals {
                 d.setBillboard(Display.Billboard.CENTER);
                 d.setDefaultBackground(false);
                 d.setShadowed(true);
+                // zasięg widoczności w blokach (Display: wartość x 64 bloki) - mniej pakietów przy wielu minionach
+                d.setViewRange(hs.viewDistance() / 64f);
                 d.text(hologramText(minion));
             });
             minion.setHologram(display);

@@ -34,6 +34,7 @@ import pl.skyblock.miniony.type.MinionType;
 import pl.skyblock.miniony.type.WorkContext;
 import pl.skyblock.miniony.util.BlockPos;
 import pl.skyblock.miniony.util.ChunkKeys;
+import pl.skyblock.miniony.util.Drops;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -61,11 +62,19 @@ public final class MinionManager {
     /** świat -> klucz chunka -> miniony postawione w tym chunku */
     private final Map<String, Map<Long, List<Minion>>> chunkIndex = new HashMap<>();
     /** klucz bloku -> minion stojący w tym bloku */
-    private final Map<String, Minion> occupied = new HashMap<>();
+    private final Map<String, Map<Long, Minion>> occupied = new HashMap<>();
     /** właściciel -> liczba postawionych minionów */
     private final Map<UUID, Integer> placedCount = new HashMap<>();
+    /** właściciel -> wszystkie jego miniony (w każdym stanie) */
+    private final Map<UUID, Set<Minion>> byOwner = new HashMap<>();
     /** miniony z załadowanym chunkiem i postawionymi encjami */
     private final Set<Minion> active = new LinkedHashSet<>();
+    /** bufor wielokrotnego użytku dla taktu pracy (bez alokacji co takt) */
+    private final List<Minion> tickBuffer = new ArrayList<>();
+    /** pozycja, od której zaczyna się kolejny takt (gdy poprzedni przekroczył budżet czasu) */
+    private int tickCursor;
+    private long nextHealthCheckAt;
+    private static final long HEALTH_CHECK_INTERVAL_MS = 5000L;
     /** chunki czekające na aktywację w następnym ticku */
     private final Set<String> pendingChunkActivation = new HashSet<>();
 
@@ -77,7 +86,7 @@ public final class MinionManager {
 
         @Override
         public boolean isMinionAt(World world, int x, int y, int z) {
-            return occupied.containsKey(ChunkKeys.blockKey(world.getName(), x, y, z));
+            return occupiedAt(world.getName(), x, y, z) != null;
         }
 
         @Override
@@ -135,6 +144,7 @@ public final class MinionManager {
         for (MinionSnapshot s : snapshots) {
             Minion minion = fromSnapshot(s);
             minions.put(minion.id(), minion);
+            addOwner(minion);
             if (minion.state() == MinionState.PLACED) {
                 // Rozliczenie czasu offline po restarcie:
                 // - minion aktywny w chwili wyłączenia/crashu (lastActiveAt == 0) liczy od ostatniego heartbeat
@@ -154,15 +164,17 @@ public final class MinionManager {
                 if (minion.world() == null) {
                     plugin.getLogger().warning("Minion " + minion.id() + " jest oznaczony jako postawiony, ale nie ma lokalizacji - zwracam go właścicielowi.");
                     minion.setState(MinionState.ITEM);
+                    minion.setLastActiveAt(0);
                     minion.setPendingDelivery(true);
                     minion.rotateToken();
                     minion.setDirty(true);
                     continue;
                 }
-                if (occupied.containsKey(minion.blockKey())) {
-                    plugin.getLogger().warning("Dwa miniony w tym samym bloku (" + minion.blockKey() + ") - minion " + minion.id() + " wraca do właściciela.");
+                if (occupiedAt(minion.world(), minion.blockX(), minion.blockY(), minion.blockZ()) != null) {
+                    plugin.getLogger().warning("Dwa miniony w tym samym bloku (" + minion.world() + " " + minion.blockX() + ", " + minion.blockY() + ", " + minion.blockZ() + ") - minion " + minion.id() + " wraca do właściciela.");
                     minion.setState(MinionState.ITEM);
                     minion.clearLocation();
+                    minion.setLastActiveAt(0);
                     minion.setPendingDelivery(true);
                     minion.rotateToken();
                     minion.setDirty(true);
@@ -232,6 +244,7 @@ public final class MinionManager {
             removeOrphans(world.getEntities());
             activateWorld(world);
         }
+        flushUrgent();
         startTasks();
         flushDirty();
     }
@@ -275,6 +288,7 @@ public final class MinionManager {
         }
         for (Minion minion : minions.values()) {
             minion.setArea(null);
+            minion.invalidateStats();
             MinionType type = plugin.types().get(minion.typeId());
             if (type != null && minion.level() > type.settings().maxLevel()) {
                 plugin.getLogger().warning("Minion " + minion.id() + " ma poziom " + minion.level() + ", a typ '" + type.id()
@@ -297,6 +311,8 @@ public final class MinionManager {
         for (World world : Bukkit.getWorlds()) {
             activateWorld(world);
         }
+        flushUrgent();
+        tickCursor = 0;
         startTasks();
     }
 
@@ -315,17 +331,46 @@ public final class MinionManager {
     /** Liczba postawionych minionów właściciela o danej rzadkości. */
     public int placedCount(UUID owner, String rarity) {
         int count = 0;
-        for (Minion m : minions.values()) {
-            if (m.state() == MinionState.PLACED && m.owner().equals(owner) && rarity.equalsIgnoreCase(m.rarity())) {
+        for (Minion m : ownedBy(owner)) {
+            if (m.state() == MinionState.PLACED && rarity.equalsIgnoreCase(m.rarity())) {
                 count++;
             }
         }
         return count;
     }
 
-    /** Efektywne statystyki: poziom x rzadkość x moduły (x paliwo). */
+    private Minion occupiedAt(String world, int x, int y, int z) {
+        Map<Long, Minion> worldOccupied = occupied.get(world);
+        return worldOccupied == null ? null : worldOccupied.get(ChunkKeys.packBlock(x, y, z));
+    }
+
+    private Collection<Minion> ownedBy(UUID owner) {
+        Set<Minion> set = byOwner.get(owner);
+        return set == null ? List.of() : set;
+    }
+
+    private void addOwner(Minion minion) {
+        byOwner.computeIfAbsent(minion.owner(), k -> new LinkedHashSet<>()).add(minion);
+    }
+
+    private void removeOwner(Minion minion) {
+        Set<Minion> set = byOwner.get(minion.owner());
+        if (set != null) {
+            set.remove(minion);
+            if (set.isEmpty()) {
+                byOwner.remove(minion.owner());
+            }
+        }
+    }
+
+    /** Efektywne statystyki: poziom x rzadkość x moduły (x paliwo). Wynik jest cache'owany w minionie. */
     public EffectiveStats stats(Minion minion) {
-        return statsFor(minion, minion.level(), minion.rarity());
+        EffectiveStats cached = minion.cachedStats();
+        if (cached == null) {
+            cached = statsFor(minion, minion.level(), minion.rarity());
+            minion.setCachedStats(cached);
+        }
+        return cached;
     }
 
     /** Statystyki miniona przy podanym poziomie i rzadkości (podgląd ulepszenia). */
@@ -350,8 +395,8 @@ public final class MinionManager {
 
     public List<Minion> placedBy(UUID owner) {
         List<Minion> result = new ArrayList<>();
-        for (Minion m : minions.values()) {
-            if (m.state() == MinionState.PLACED && m.owner().equals(owner)) {
+        for (Minion m : ownedBy(owner)) {
+            if (m.state() == MinionState.PLACED) {
                 result.add(m);
             }
         }
@@ -361,8 +406,8 @@ public final class MinionManager {
 
     public int pendingCount(UUID owner) {
         int count = 0;
-        for (Minion m : minions.values()) {
-            if (m.pendingDelivery() && m.state() == MinionState.ITEM && m.owner().equals(owner)) {
+        for (Minion m : ownedBy(owner)) {
+            if (m.pendingDelivery() && m.state() == MinionState.ITEM) {
                 count++;
             }
         }
@@ -390,7 +435,8 @@ public final class MinionManager {
         chunkIndex.computeIfAbsent(minion.world(), w -> new HashMap<>())
                 .computeIfAbsent(minion.chunkKey(), k -> new ArrayList<>(2))
                 .add(minion);
-        occupied.put(minion.blockKey(), minion);
+        occupied.computeIfAbsent(minion.world(), w -> new HashMap<>())
+                .put(ChunkKeys.packBlock(minion.blockX(), minion.blockY(), minion.blockZ()), minion);
         placedCount.merge(minion.owner(), 1, Integer::sum);
     }
 
@@ -408,7 +454,13 @@ public final class MinionManager {
                 chunkIndex.remove(minion.world());
             }
         }
-        occupied.remove(minion.blockKey(), minion);
+        Map<Long, Minion> worldOccupied = occupied.get(minion.world());
+        if (worldOccupied != null) {
+            worldOccupied.remove(ChunkKeys.packBlock(minion.blockX(), minion.blockY(), minion.blockZ()), minion);
+            if (worldOccupied.isEmpty()) {
+                occupied.remove(minion.world());
+            }
+        }
         placedCount.computeIfPresent(minion.owner(), (k, v) -> v <= 1 ? null : v - 1);
     }
 
@@ -443,7 +495,8 @@ public final class MinionManager {
         }
         if (minion.lastActiveAt() != 0) {
             minion.setLastActiveAt(0);
-            minion.setDirty(true);
+            // Natychmiastowy zapis: przy crashu przed autozapisem produkcja offline nie może się powtórzyć.
+            urgentSave.add(minion);
         }
         plugin.visuals().spawn(minion, world);
         active.add(minion);
@@ -496,13 +549,24 @@ public final class MinionManager {
             plugin.getLogger().log(Level.SEVERE, "Błąd symulacji offline miniona " + minion.id(), e);
             return;
         }
+        // Sumowanie per przedmiot i dokładanie stosami aż do zapełnienia - bez tysięcy przeszukań magazynu.
         List<ItemStack> overflow = new ArrayList<>();
-        for (ItemStack stack : produced) {
-            int left = minion.storage().addPartial(stack);
-            if (left > 0) {
-                ItemStack rest = stack.clone();
-                rest.setAmount(left);
-                overflow.add(rest);
+        for (Drops.Total total : Drops.merge(produced)) {
+            ItemStack template = total.template();
+            int max = Math.max(1, template.getMaxStackSize());
+            long amount = total.amount();
+            while (amount > 0) {
+                int part = (int) Math.min(max, amount);
+                ItemStack stack = template.clone();
+                stack.setAmount(part);
+                int left = minion.storage().addPartial(stack);
+                amount -= part - left;
+                if (left > 0) {
+                    break; // magazyn pełny dla tego przedmiotu
+                }
+            }
+            if (amount > 0) {
+                Drops.addSplit(overflow, template, (int) Math.min(amount, Integer.MAX_VALUE));
             }
         }
         plugin.modules().sellOverflow(minion, overflow);
@@ -573,6 +637,7 @@ public final class MinionManager {
                     activate(minion, world);
                 }
             }
+            flushUrgent();
         });
     }
 
@@ -595,6 +660,7 @@ public final class MinionManager {
 
     public void onWorldLoad(World world) {
         activateWorld(world);
+        flushUrgent();
     }
 
     public void onWorldUnload(World world) {
@@ -631,67 +697,119 @@ public final class MinionManager {
         long now = System.currentTimeMillis();
         long delta = lastTickAt > 0 ? Math.min(now - lastTickAt, 60_000L) : 0;
         lastTickAt = now;
-        for (Minion minion : new ArrayList<>(active)) {
-            World world = Bukkit.getWorld(minion.world());
+        boolean healthCheck = now >= nextHealthCheckAt;
+        if (healthCheck) {
+            nextHealthCheckAt = now + HEALTH_CHECK_INTERVAL_MS;
+        }
+        long deadline = System.nanoTime() + plugin.settings().workBudgetMs() * 1_000_000L;
+
+        tickBuffer.clear();
+        tickBuffer.addAll(active);
+        int size = tickBuffer.size();
+        int start = tickCursor < size ? tickCursor : 0;
+        String lastWorldName = null;
+        World lastWorld = null;
+        int processed = 0;
+        for (; processed < size; processed++) {
+            Minion minion = tickBuffer.get((start + processed) % size);
+            if (!active.contains(minion)) {
+                continue; // dezaktywowany w trakcie tego taktu
+            }
+            // cache świata - większość minionów w jednym świecie wysp
+            World world;
+            if (minion.world().equals(lastWorldName)) {
+                world = lastWorld;
+            } else {
+                world = Bukkit.getWorld(minion.world());
+                lastWorldName = minion.world();
+                lastWorld = world;
+            }
             if (world == null || !world.isChunkLoaded(minion.chunkX(), minion.chunkZ())) {
+                plugin.gui().closeAll(minion.id());
                 deactivate(minion);
                 continue;
             }
-            if (!plugin.visuals().isIntact(minion)) {
-                plugin.visuals().spawn(minion, world);
-            } else {
-                keepInPlace(minion, world);
+            if (healthCheck) {
+                if (!plugin.visuals().isIntact(minion)) {
+                    plugin.visuals().spawn(minion, world);
+                } else {
+                    keepInPlace(minion, world);
+                }
             }
             plugin.modules().consumeFuel(minion, delta);
             if (now < minion.nextWorkAt()) {
                 continue;
             }
-            MinionType type = plugin.types().get(minion.typeId());
-            if (type == null || !type.isEnabled()) {
-                minion.setNextWorkAt(now + 5000L);
-                minion.setStatus(MinionStatus.IDLE);
-                plugin.visuals().updateHologram(minion);
-                continue;
+            if (System.nanoTime() > deadline) {
+                break; // budżet czasu wyczerpany - reszta minionów w kolejnym takcie
             }
-            minion.setNextWorkAt(now + stats(minion).intervalMs());
-            int before = minion.storage().totalItems();
-            MinionStatus status;
-            try {
-                status = type.work(minion, world, workContext);
-            } catch (RuntimeException e) {
-                status = MinionStatus.IDLE;
-                if (reportedWorkErrors.add(type.id())) {
-                    plugin.getLogger().log(Level.SEVERE, "Błąd pracy miniona typu '" + type.id() + "' (" + minion.id() + ")", e);
+            work(minion, world, now);
+        }
+        tickCursor = processed < size ? (start + processed) % size : 0;
+        if (processed < size) {
+            // paliwo pozostałych minionów i tak musi się zużywać
+            for (int i = processed + 1; i < size; i++) {
+                Minion minion = tickBuffer.get((start + i) % size);
+                if (active.contains(minion)) {
+                    plugin.modules().consumeFuel(minion, delta);
                 }
             }
-            minion.setStatus(status);
-            if (status == MinionStatus.WORKING) {
-                minion.setLastWorkAt(now);
-            }
-            try {
-                if (plugin.modules().afterWork(minion, world, now)) {
-                    urgentSave.add(minion);
-                }
-            } catch (RuntimeException e) {
-                if (reportedWorkErrors.add("modules")) {
-                    plugin.getLogger().log(Level.SEVERE, "Błąd modułów miniona " + minion.id(), e);
-                }
-            }
-            if (minion.storage().totalItems() != before) {
-                minion.setDirty(true);
-                plugin.gui().refresh(minion.id());
-            }
+        }
+        tickBuffer.clear();
+        flushUrgent();
+    }
+
+    private void work(Minion minion, World world, long now) {
+        MinionType type = plugin.types().get(minion.typeId());
+        if (type == null || !type.isEnabled()) {
+            minion.setNextWorkAt(now + 5000L);
+            minion.setStatus(MinionStatus.IDLE);
             plugin.visuals().updateHologram(minion);
+            return;
         }
-        if (!urgentSave.isEmpty()) {
-            List<MinionSnapshot> batch = new ArrayList<>(urgentSave.size());
-            for (Minion minion : urgentSave) {
-                minion.setDirty(false);
-                batch.add(snapshot(minion));
+        minion.setNextWorkAt(now + stats(minion).intervalMs());
+        int before = minion.storage().totalItems();
+        MinionStatus status;
+        try {
+            status = type.work(minion, world, workContext);
+        } catch (RuntimeException e) {
+            status = MinionStatus.IDLE;
+            if (reportedWorkErrors.add(type.id())) {
+                plugin.getLogger().log(Level.SEVERE, "Błąd pracy miniona typu '" + type.id() + "' (" + minion.id() + ")", e);
             }
-            urgentSave.clear();
-            plugin.database().saveAsync(batch, this::onSaveFailure);
         }
+        minion.setStatus(status);
+        if (status == MinionStatus.WORKING) {
+            minion.setLastWorkAt(now);
+        }
+        try {
+            if (plugin.modules().afterWork(minion, world, now)) {
+                urgentSave.add(minion);
+            }
+        } catch (RuntimeException e) {
+            if (reportedWorkErrors.add("modules")) {
+                plugin.getLogger().log(Level.SEVERE, "Błąd modułów miniona " + minion.id(), e);
+            }
+        }
+        if (minion.storage().totalItems() != before) {
+            minion.setDirty(true);
+            plugin.gui().refresh(minion.id());
+        }
+        plugin.visuals().updateHologram(minion);
+    }
+
+    /** Zapisuje w jednej transakcji miniony wymagające natychmiastowego zapisu. */
+    private void flushUrgent() {
+        if (urgentSave.isEmpty()) {
+            return;
+        }
+        List<MinionSnapshot> batch = new ArrayList<>(urgentSave.size());
+        for (Minion minion : urgentSave) {
+            minion.setDirty(false);
+            batch.add(snapshot(minion));
+        }
+        urgentSave.clear();
+        plugin.database().saveAsync(batch, this::onSaveFailure);
     }
 
     private void keepInPlace(Minion minion, World world) {
@@ -784,6 +902,7 @@ public final class MinionManager {
         minion.storage().setCapacity(stats(minion).capacity());
         minion.setState(MinionState.ITEM);
         minions.put(minion.id(), minion);
+        addOwner(minion);
         saveNow(minion);
         return minion;
     }
@@ -826,8 +945,7 @@ public final class MinionManager {
             msg.send(player, "zajete-miejsce");
             return;
         }
-        String blockKey = ChunkKeys.blockKey(world.getName(), target.getX(), target.getY(), target.getZ());
-        if (occupied.containsKey(blockKey)) {
+        if (occupiedAt(world.getName(), target.getX(), target.getY(), target.getZ()) != null) {
             msg.send(player, "za-blisko");
             return;
         }
@@ -873,7 +991,9 @@ public final class MinionManager {
         }
 
         float yaw = normalizeYaw(player.getLocation().getYaw() + 180f);
+        removeOwner(minion);
         minion.setOwner(player.getUniqueId(), player.getName());
+        addOwner(minion);
         minion.setIslandId(islandId);
         minion.setLocation(world.getName(), location.getX(), location.getY(), location.getZ(), yaw);
         minion.setState(MinionState.PLACED);
@@ -1035,8 +1155,8 @@ public final class MinionManager {
     /** Wydaje graczowi miniony oczekujące na zwrot (tyle, ile zmieści się w ekwipunku). */
     public void deliverPending(Player player, boolean feedbackIfNone) {
         List<Minion> pending = new ArrayList<>();
-        for (Minion minion : minions.values()) {
-            if (minion.pendingDelivery() && minion.state() == MinionState.ITEM && minion.owner().equals(player.getUniqueId())) {
+        for (Minion minion : ownedBy(player.getUniqueId())) {
+            if (minion.pendingDelivery() && minion.state() == MinionState.ITEM) {
                 pending.add(minion);
             }
         }
@@ -1068,10 +1188,30 @@ public final class MinionManager {
         }
     }
 
+    /**
+     * Przedmiot miniona został zniszczony (lawa, ogień, kaktus, wybuch, pustka, zniknięcie po 5 min).
+     * Jeśli to aktualny przedmiot (zgodny token), minion przestaje istnieć - usuwamy go z pamięci i bazy.
+     */
+    public void onMinionItemDestroyed(ItemStack stack, String cause) {
+        UUID id = plugin.items().readId(stack);
+        UUID token = plugin.items().readToken(stack);
+        Minion minion = get(id);
+        if (minion == null || token == null || minion.state() != MinionState.ITEM || minion.pendingDelivery()
+                || !token.equals(minion.token())) {
+            return;
+        }
+        minions.remove(minion.id());
+        removeOwner(minion);
+        urgentSave.remove(minion);
+        plugin.database().deleteAsync(minion.id());
+        plugin.getLogger().info("Przedmiot miniona " + minion.id() + " (" + minion.typeId() + ", właściciel " + minion.ownerName()
+                + ") został zniszczony (" + cause + ") - minion usunięty z bazy.");
+    }
+
     /** Aktualizuje nick właściciela (hologram, lista) po wejściu gracza. */
     public void updateOwnerName(Player player) {
-        for (Minion minion : minions.values()) {
-            if (minion.owner().equals(player.getUniqueId()) && !player.getName().equals(minion.ownerName())) {
+        for (Minion minion : ownedBy(player.getUniqueId())) {
+            if (!player.getName().equals(minion.ownerName())) {
                 minion.setOwnerName(player.getName());
                 minion.setDirty(true);
                 if (active.contains(minion)) {

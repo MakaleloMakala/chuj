@@ -5,7 +5,12 @@ import org.bukkit.command.PluginCommand;
 import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.HandlerList;
+import org.bukkit.event.Listener;
+import org.bukkit.event.server.PluginDisableEvent;
+import org.bukkit.event.server.PluginEnableEvent;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -52,7 +57,7 @@ import java.util.logging.Level;
 
 public final class MinionyPlugin extends JavaPlugin {
 
-    private static final int CONFIG_VERSION = 3;
+    private static final int CONFIG_VERSION = 4;
 
     private PluginSettings settings;
     private Messages messages;
@@ -127,6 +132,7 @@ public final class MinionyPlugin extends JavaPlugin {
         pm.registerEvents(new EntityListener(this), this);
         pm.registerEvents(new ChunkListener(this), this);
         pm.registerEvents(new PlayerListener(this), this);
+        pm.registerEvents(new HookListener(), this);
 
         PluginCommand command = getCommand("minion");
         if (command != null) {
@@ -147,44 +153,124 @@ public final class MinionyPlugin extends JavaPlugin {
     }
 
     private void setupHooks() {
-        PluginManager pm = getServer().getPluginManager();
+        setupIslands(true);
+        setupLuckPerms(true);
+        setupEconomy(true);
+        setupNexo();
+    }
+
+    private void setupIslands(boolean logMissing) {
+        if (islands != null) {
+            islands.shutdown();
+        }
         islands = new NoIslandHook();
-        if (pm.isPluginEnabled("SuperiorSkyblock2")) {
+        if (getServer().getPluginManager().isPluginEnabled("SuperiorSkyblock2")) {
             try {
                 islands = new SuperiorSkyblockHook(this);
             } catch (Throwable t) {
                 getLogger().log(Level.WARNING, "Nie udało się podłączyć do SuperiorSkyblock2 - sprawdzanie wysp wyłączone.", t);
                 islands = new NoIslandHook();
             }
-        } else {
+        } else if (logMissing) {
             getLogger().info("Brak SuperiorSkyblock2 - sprawdzanie wysp jest wyłączone.");
         }
+    }
+
+    private void setupLuckPerms(boolean logMissing) {
+        if (luckPerms != null) {
+            try {
+                luckPerms.shutdown();
+            } catch (Throwable ignored) {
+                // LuckPerms mógł zostać już wyłączony
+            }
+        }
         luckPerms = null;
-        if (pm.isPluginEnabled("LuckPerms")) {
+        if (getServer().getPluginManager().isPluginEnabled("LuckPerms")) {
             try {
                 luckPerms = LuckPermsHook.create(this);
             } catch (Throwable t) {
                 getLogger().log(Level.WARNING, "Nie udało się podłączyć do LuckPerms - limity liczone z uprawnień Bukkit.", t);
             }
-        } else {
+        } else if (logMissing) {
             getLogger().info("Brak LuckPerms - limity liczone z uprawnień Bukkit, bez automatycznego odświeżania.");
         }
         limits.setLuckPerms(luckPerms);
+        limits.clear();
+    }
 
+    private void setupEconomy(boolean logMissing) {
         economy = EconomyHook.NONE;
-        if (pm.isPluginEnabled("Vault")) {
+        if (getServer().getPluginManager().isPluginEnabled("Vault")) {
             try {
                 economy = new VaultEconomyHook(getLogger());
             } catch (Throwable t) {
                 getLogger().log(Level.WARNING, "Nie udało się podłączyć do Vault - koszty pieniężne są niedostępne.", t);
             }
-        } else {
+        } else if (logMissing) {
             getLogger().info("Brak Vault - ulepszenia za pieniądze są niedostępne.");
         }
+    }
+
+    private void setupNexo() {
         nexo = NexoHook.disabled();
-        Plugin nexoPlugin = pm.getPlugin("Nexo");
+        Plugin nexoPlugin = getServer().getPluginManager().getPlugin("Nexo");
         if (nexoPlugin != null && nexoPlugin.isEnabled()) {
             nexo = NexoHook.create(nexoPlugin, getLogger());
+        }
+    }
+
+    /**
+     * Reakcja na włączenie/wyłączenie pluginów integracji w trakcie działania serwera
+     * (np. PlugMan) - zamiast wyjątków integracja jest wyłączana albo podłączana ponownie.
+     */
+    private final class HookListener implements Listener {
+
+        @EventHandler(priority = EventPriority.MONITOR)
+        public void onPluginDisable(PluginDisableEvent event) {
+            String name = event.getPlugin().getName();
+            switch (name) {
+                case "SuperiorSkyblock2" -> {
+                    islands.shutdown();
+                    islands = new NoIslandHook();
+                    getLogger().warning("SuperiorSkyblock2 został wyłączony - sprawdzanie wysp wyłączone.");
+                }
+                case "LuckPerms" -> {
+                    luckPerms = null;
+                    limits.setLuckPerms(null);
+                    limits.clear();
+                    getLogger().warning("LuckPerms został wyłączony - limity liczone z uprawnień Bukkit.");
+                }
+                case "Vault" -> {
+                    economy = EconomyHook.NONE;
+                    getLogger().warning("Vault został wyłączony - koszty pieniężne i auto-sprzedaż niedostępne.");
+                }
+                case "Nexo" -> {
+                    nexo = NexoHook.disabled();
+                    getLogger().warning("Nexo został wyłączony - przedmioty Nexo w kosztach niedostępne.");
+                }
+                default -> {
+                    // inne pluginy nas nie dotyczą
+                }
+            }
+        }
+
+        @EventHandler(priority = EventPriority.MONITOR)
+        public void onPluginEnable(PluginEnableEvent event) {
+            switch (event.getPlugin().getName()) {
+                case "SuperiorSkyblock2" -> {
+                    setupIslands(false);
+                    getLogger().info("Podłączono SuperiorSkyblock2.");
+                }
+                case "LuckPerms" -> {
+                    setupLuckPerms(false);
+                    getLogger().info("Podłączono LuckPerms.");
+                }
+                case "Vault" -> setupEconomy(false);
+                case "Nexo" -> setupNexo();
+                default -> {
+                    // inne pluginy nas nie dotyczą
+                }
+            }
         }
     }
 

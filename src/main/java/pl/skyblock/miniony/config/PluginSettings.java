@@ -12,6 +12,7 @@ public record PluginSettings(
         String databaseFile,
         int autosaveSeconds,
         int workTickPeriod,
+        int workBudgetMs,
         boolean requireIsland,
         boolean memberAccess,
         boolean updateIslandBlocks,
@@ -41,6 +42,7 @@ public record PluginSettings(
         }
         int autosave = reader.getInt("baza-danych.autozapis-sekundy", 30, 5, 3600);
         int tickPeriod = reader.getInt("praca.takt-tickow", 20, 1, 1200);
+        int budget = reader.getInt("praca.maks-ms-na-takt", 10, 1, 200);
         boolean requireIsland = reader.getBoolean("wyspy.wymagaj-wyspy", true);
         boolean memberAccess = reader.getBoolean("wyspy.dostep-czlonkow", true);
         boolean updateBlocks = reader.getBoolean("wyspy.aktualizuj-bloki-wyspy", true);
@@ -83,7 +85,7 @@ public record PluginSettings(
         boolean rarityUpgrade = reader.getBoolean("ulepszanie-rzadkosci.wlaczone", false);
         boolean rarityNeedsMax = reader.getBoolean("ulepszanie-rzadkosci.wymaga-max-poziomu", true);
 
-        return new PluginSettings(dbFile, autosave, tickPeriod, requireIsland, memberAccess, updateBlocks,
+        return new PluginSettings(dbFile, autosave, tickPeriod, budget, requireIsland, memberAccess, updateBlocks,
                 defLimit, maxLimit, bypassIgnoresMax, returnStorage, upgradeOwnerOnly, HologramSettings.read(reader),
                 Collections.unmodifiableMap(rarities), List.copyOf(order), rarityUpgrade, rarityNeedsMax,
                 OfflineSettings.read(reader), ModulesSettings.read(reader), GuiSettings.read(reader),

@@ -14,7 +14,10 @@ public final class ChunkKeys {
         return chunkKey(((int) Math.floor(x)) >> 4, ((int) Math.floor(z)) >> 4);
     }
 
-    public static String blockKey(String world, int x, int y, int z) {
-        return world + ';' + x + ';' + y + ';' + z;
+    /**
+     * Pozycja bloku spakowana do long (x, z: 26 bitów, y: 12 bitów - zakres jak w Minecraft).
+     */
+    public static long packBlock(int x, int y, int z) {
+        return ((long) (x & 0x3FFFFFF) << 38) | ((long) (z & 0x3FFFFFF) << 12) | (y & 0xFFFL);
     }
 }

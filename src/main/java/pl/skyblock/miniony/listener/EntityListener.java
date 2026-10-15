@@ -2,6 +2,7 @@ package pl.skyblock.miniony.listener;
 
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -9,6 +10,8 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityCombustEvent;
 import org.bukkit.event.entity.EntityDeathEvent;
+import org.bukkit.event.entity.EntityRemoveEvent;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.event.player.PlayerArmorStandManipulateEvent;
 import org.bukkit.event.player.PlayerInteractAtEntityEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
@@ -95,6 +98,23 @@ public final class EntityListener implements Listener {
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onDeath(EntityDeathEvent event) {
         plugin.minions().onEntityDeath(event);
+    }
+
+    /** Zniszczony przedmiot miniona (lawa, ogień, wybuch, pustka, zniknięcie) - minion przestaje istnieć. */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onItemRemoved(EntityRemoveEvent event) {
+        if (!(event.getEntity() instanceof Item item)) {
+            return;
+        }
+        EntityRemoveEvent.Cause cause = event.getCause();
+        if (cause != EntityRemoveEvent.Cause.DEATH && cause != EntityRemoveEvent.Cause.DESPAWN
+                && cause != EntityRemoveEvent.Cause.OUT_OF_WORLD) {
+            return;
+        }
+        ItemStack stack = item.getItemStack();
+        if (plugin.items().isMinionItem(stack)) {
+            plugin.minions().onMinionItemDestroyed(stack, cause.name());
+        }
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)

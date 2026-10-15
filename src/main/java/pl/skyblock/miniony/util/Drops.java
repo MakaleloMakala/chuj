@@ -34,6 +34,37 @@ public final class Drops {
         return result;
     }
 
+    /** Suma sztuk jednego rodzaju przedmiotu. */
+    public record Total(ItemStack template, long amount) {
+    }
+
+    /** Sumuje sztuki podobnych przedmiotów (isSimilar). Wzorce mają ilość 1. */
+    public static List<Total> merge(Collection<ItemStack> items) {
+        List<ItemStack> templates = new ArrayList<>();
+        List<long[]> amounts = new ArrayList<>();
+        outer:
+        for (ItemStack item : items) {
+            if (item == null || item.getType().isAir() || item.getAmount() <= 0) {
+                continue;
+            }
+            for (int i = 0; i < templates.size(); i++) {
+                if (templates.get(i).isSimilar(item)) {
+                    amounts.get(i)[0] += item.getAmount();
+                    continue outer;
+                }
+            }
+            ItemStack template = item.clone();
+            template.setAmount(1);
+            templates.add(template);
+            amounts.add(new long[]{item.getAmount()});
+        }
+        List<Total> result = new ArrayList<>(templates.size());
+        for (int i = 0; i < templates.size(); i++) {
+            result.add(new Total(templates.get(i), amounts.get(i)[0]));
+        }
+        return result;
+    }
+
     /** Dodaje {@code amount} sztuk przedmiotu podzielonych na stosy o maksymalnym rozmiarze. */
     public static void addSplit(List<ItemStack> target, ItemStack template, int amount) {
         int max = Math.max(1, template.getMaxStackSize());

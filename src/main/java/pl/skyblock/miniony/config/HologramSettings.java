@@ -6,6 +6,7 @@ import java.util.List;
 public record HologramSettings(
         boolean enabled,
         double height,
+        int viewDistance,
         List<String> lines,
         String statusWorking,
         String statusFull,
@@ -18,6 +19,7 @@ public record HologramSettings(
         return new HologramSettings(
                 reader.getBoolean("hologram.wlaczony", true),
                 reader.getDouble("hologram.wysokosc", 1.35, 0.0, 5.0),
+                reader.getInt("hologram.zasieg-widocznosci", 24, 4, 128),
                 reader.getStringList("hologram.linie", List.of("<gold><typ> <gray>[<white>Poz. <poziom></white>]")),
                 reader.getString("hologram.status.pracuje", "<green>Pracuje"),
                 reader.getString("hologram.status.pelny", "<red>Magazyn pełny"),

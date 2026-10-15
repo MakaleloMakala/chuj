@@ -50,6 +50,7 @@ public final class Minion {
     private long lastWorkAt;
 
     // --- runtime ---
+    private EffectiveStats cachedStats;
     private long nextSellAt;
     private ArmorStand body;
     private TextDisplay hologram;
@@ -116,6 +117,7 @@ public final class Minion {
 
     public void setRarity(String rarity) {
         this.rarity = rarity;
+        this.cachedStats = null;
     }
 
     public int level() {
@@ -124,6 +126,7 @@ public final class Minion {
 
     public void setLevel(int level) {
         this.level = level;
+        this.cachedStats = null;
     }
 
     public MinionState state() {
@@ -192,9 +195,6 @@ public final class Minion {
         return blockZ() >> 4;
     }
 
-    public String blockKey() {
-        return ChunkKeys.blockKey(world, blockX(), blockY(), blockZ());
-    }
 
     public void setLocation(String world, double x, double y, double z, float yaw) {
         this.world = world;
@@ -259,6 +259,7 @@ public final class Minion {
     }
 
     public void setFuel(String fuelType, long fuelMs) {
+        String previousType = this.fuelType;
         if (fuelType == null || fuelMs <= 0) {
             this.fuelType = null;
             this.fuelMs = 0;
@@ -266,6 +267,24 @@ public final class Minion {
             this.fuelType = fuelType;
             this.fuelMs = fuelMs;
         }
+        // statystyki zależą tylko od obecności i rodzaju paliwa, nie od pozostałego czasu
+        if (!java.util.Objects.equals(previousType, this.fuelType)) {
+            this.cachedStats = null;
+        }
+    }
+
+    /** Statystyki z cache (null = do przeliczenia). */
+    public EffectiveStats cachedStats() {
+        return cachedStats;
+    }
+
+    public void setCachedStats(EffectiveStats cachedStats) {
+        this.cachedStats = cachedStats;
+    }
+
+    /** Unieważnia cache statystyk (zmiana modułów, przeładowanie configu). */
+    public void invalidateStats() {
+        this.cachedStats = null;
     }
 
     public long lastActiveAt() {

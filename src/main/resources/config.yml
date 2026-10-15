@@ -5,7 +5,7 @@
 # ==========================================================
 
 # Wersja pliku konfiguracyjnego - nie zmieniaj ręcznie.
-wersja-configu: 3
+wersja-configu: 4
 
 baza-danych:
   # Nazwa pliku bazy SQLite w folderze pluginu.
@@ -18,6 +18,9 @@ praca:
   # Co ile ticków (20 ticków = 1 sekunda) scheduler sprawdza, które miniony mają wykonać cykl pracy.
   # Każdy minion pracuje według własnego interwału z sekcji "typy".
   takt-tickow: 20
+  # Maksymalny czas (ms) pracy minionów w jednym takcie. Gdy zostanie przekroczony, pozostałe miniony
+  # wykonają pracę w kolejnym takcie (ochrona przed lagami przy setkach minionów).
+  maks-ms-na-takt: 10
 
 wyspy:
   # Gdy SuperiorSkyblock2 jest zainstalowany: miniona można postawić tylko na wyspie,
@@ -49,6 +52,8 @@ hologram:
   wlaczony: true
   # Wysokość hologramu nad podstawą miniona (w blokach).
   wysokosc: 1.35
+  # Z jakiej odległości (w blokach) widać hologram. Mniejsza wartość = mniej pracy dla klientów przy wielu minionach.
+  zasieg-widocznosci: 24
   # Dostępne zmienne: <typ>, <poziom>, <max-poziom>, <rzadkosc>, <wlasciciel>, <zapelnienie>, <pojemnosc>, <status>,
   # <interwal>, <zasieg>, <mnoznik>, <bonus>, <moduly>, <sloty-modulow>
   linie:
