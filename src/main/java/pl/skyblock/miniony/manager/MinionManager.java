@@ -9,6 +9,8 @@ import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.LivingEntity;
+import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
@@ -28,6 +30,7 @@ import pl.skyblock.miniony.type.MinionType;
 import pl.skyblock.miniony.type.WorkContext;
 import pl.skyblock.miniony.util.BlockPos;
 import pl.skyblock.miniony.util.ChunkKeys;
+import pl.skyblock.miniony.util.Drops;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -73,7 +76,23 @@ public final class MinionManager {
         public boolean isMinionAt(World world, int x, int y, int z) {
             return occupied.containsKey(ChunkKeys.blockKey(world.getName(), x, y, z));
         }
+
+        @Override
+        public boolean isMinionItem(ItemStack item) {
+            return plugin.items().isMinionItem(item);
+        }
+
+        @Override
+        public boolean kill(Minion minion, LivingEntity entity, double dropMultiplier, boolean dropExp) {
+            return killForMinion(minion, entity, dropMultiplier, dropExp);
+        }
     };
+
+    /** Zabójstwo w toku - EntityDeathEvent jest wywoływany synchronicznie wewnątrz setHealth(0). */
+    private record PendingKill(Minion minion, UUID entity, double multiplier, boolean dropExp) {
+    }
+
+    private PendingKill pendingKill;
 
     private BukkitTask workTask;
     private BukkitTask saveTask;
@@ -120,7 +139,7 @@ public final class MinionManager {
 
     private Minion fromSnapshot(MinionSnapshot s) {
         MinionType type = plugin.types().get(s.type());
-        int capacity = type != null ? type.settings().capacity() : 9;
+        int capacity = type != null ? type.settings().level(Math.max(1, s.level())).capacity() : 9;
         ItemStack[] items = null;
         if (s.storage() != null && s.storage().length > 0) {
             try {
@@ -131,8 +150,17 @@ public final class MinionManager {
             }
         }
         MinionStorage storage = MinionStorage.of(items, capacity);
+        int level = Math.max(1, s.level());
+        if (type != null && level > type.settings().maxLevel()) {
+            plugin.getLogger().warning("Minion " + s.id() + " ma poziom " + level + ", a typ '" + type.id() + "' ma tylko "
+                    + type.settings().maxLevel() + " poziomów - obniżam do maksymalnego.");
+            level = type.settings().maxLevel();
+        }
         Minion m = new Minion(s.id(), s.owner(), s.ownerName(), s.type(),
-                s.rarity() == null ? PluginSettings.DEFAULT_RARITY : s.rarity(), Math.max(1, s.level()), storage, s.createdAt());
+                s.rarity() == null ? PluginSettings.DEFAULT_RARITY : s.rarity(), level, storage, s.createdAt());
+        if (level != s.level()) {
+            m.setDirty(true);
+        }
         m.setIslandId(s.island());
         m.setToken(s.token());
         MinionState state;
@@ -207,8 +235,14 @@ public final class MinionManager {
         for (Minion minion : minions.values()) {
             minion.setArea(null);
             MinionType type = plugin.types().get(minion.typeId());
-            if (type != null && minion.storage().capacity() != type.settings().capacity()) {
-                minion.storage().setCapacity(type.settings().capacity());
+            if (type != null && minion.level() > type.settings().maxLevel()) {
+                plugin.getLogger().warning("Minion " + minion.id() + " ma poziom " + minion.level() + ", a typ '" + type.id()
+                        + "' ma teraz " + type.settings().maxLevel() + " poziomów - obniżam do maksymalnego.");
+                minion.setLevel(type.settings().maxLevel());
+                minion.setDirty(true);
+            }
+            if (type != null && minion.storage().capacity() != type.level(minion).capacity()) {
+                minion.storage().setCapacity(type.level(minion).capacity());
                 minion.setDirty(true);
             }
         }
@@ -328,7 +362,7 @@ public final class MinionManager {
         plugin.visuals().spawn(minion, world);
         active.add(minion);
         MinionType type = plugin.types().get(minion.typeId());
-        long interval = type != null ? type.settings().intervalSeconds() * 1000L : 5000L;
+        long interval = type != null ? type.level(minion).intervalSeconds() * 1000L : 5000L;
         // rozłożenie pracy w czasie, żeby miniony z jednego chunka nie pracowały w tym samym ticku
         minion.setNextWorkAt(System.currentTimeMillis() + ThreadLocalRandom.current().nextLong(Math.max(1, interval)));
     }
@@ -341,10 +375,10 @@ public final class MinionManager {
 
     private List<BlockPos> computeArea(Minion minion, World world) {
         MinionType type = plugin.types().get(minion.typeId());
-        if (type == null) {
+        if (type == null || !type.usesBlockArea()) {
             return List.of();
         }
-        int range = type.settings().range();
+        int range = type.level(minion).range();
         int y = minion.blockY() + type.areaYOffset();
         if (y < world.getMinHeight() || y >= world.getMaxHeight()) {
             return List.of();
@@ -478,7 +512,7 @@ public final class MinionManager {
                 plugin.visuals().updateHologram(minion);
                 continue;
             }
-            minion.setNextWorkAt(now + type.settings().intervalSeconds() * 1000L);
+            minion.setNextWorkAt(now + type.level(minion).intervalSeconds() * 1000L);
             int before = minion.storage().totalItems();
             MinionStatus status;
             try {
@@ -515,14 +549,74 @@ public final class MinionManager {
         }
     }
 
+    private boolean killForMinion(Minion minion, LivingEntity entity, double multiplier, boolean dropExp) {
+        if (pendingKill != null || entity.isDead()) {
+            return false;
+        }
+        pendingKill = new PendingKill(minion, entity.getUniqueId(), multiplier, dropExp);
+        try {
+            entity.setHealth(0);
+        } catch (RuntimeException e) {
+            plugin.getLogger().log(Level.WARNING, "Nie udało się zabić moba " + entity.getType() + " przez miniona " + minion.id(), e);
+            return false;
+        } finally {
+            pendingKill = null;
+        }
+        return entity.isDead();
+    }
+
+    /**
+     * Przechwycenie dropu moba zabitego przez Zabójcę. Drop (z mnożnikiem) trafia do magazynu,
+     * a to, co się nie zmieściło, spada normalnie na ziemię.
+     */
+    public void onEntityDeath(EntityDeathEvent event) {
+        PendingKill kill = pendingKill;
+        if (kill == null || !kill.entity().equals(event.getEntity().getUniqueId())) {
+            return;
+        }
+        List<ItemStack> leftovers = new ArrayList<>();
+        for (ItemStack stack : Drops.multiply(event.getDrops(), kill.multiplier())) {
+            int left = kill.minion().storage().addPartial(stack);
+            if (left > 0) {
+                ItemStack rest = stack.clone();
+                rest.setAmount(left);
+                leftovers.add(rest);
+            }
+        }
+        event.getDrops().clear();
+        event.getDrops().addAll(leftovers);
+        if (!kill.dropExp()) {
+            event.setDroppedExp(0);
+        }
+    }
+
+    /** Po zmianie poziomu: nowa pojemność, obszar, wygląd i hologram. */
+    public void applyLevelChange(Minion minion) {
+        MinionType type = plugin.types().get(minion.typeId());
+        if (type == null) {
+            return;
+        }
+        minion.storage().setCapacity(type.level(minion).capacity());
+        minion.setArea(null);
+        if (active.contains(minion)) {
+            World world = Bukkit.getWorld(minion.world());
+            if (world != null) {
+                minion.setArea(computeArea(minion, world));
+                plugin.visuals().spawn(minion, world);
+            }
+        }
+    }
+
     // =====================================================================================
     // Tworzenie / stawianie / zbieranie
     // =====================================================================================
 
     /** Tworzy nowego miniona w stanie przedmiotu i od razu zapisuje go w bazie. */
-    public Minion createItemMinion(MinionType type, Player owner) {
+    public Minion createItemMinion(MinionType type, Player owner, int level) {
+        int lvl = Math.max(1, Math.min(level, type.settings().maxLevel()));
         Minion minion = new Minion(UUID.randomUUID(), owner.getUniqueId(), owner.getName(), type.id(),
-                PluginSettings.DEFAULT_RARITY, 1, new MinionStorage(type.settings().capacity()), System.currentTimeMillis());
+                PluginSettings.DEFAULT_RARITY, lvl, new MinionStorage(type.settings().level(lvl).capacity()),
+                System.currentTimeMillis());
         minion.setState(MinionState.ITEM);
         minions.put(minion.id(), minion);
         saveNow(minion);

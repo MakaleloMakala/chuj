@@ -10,7 +10,8 @@ public record HologramSettings(
         String statusWorking,
         String statusFull,
         String statusNoSpace,
-        String statusIdle
+        String statusIdle,
+        String statusNoTarget
 ) {
 
     static HologramSettings read(ConfigReader reader) {
@@ -21,7 +22,8 @@ public record HologramSettings(
                 reader.getString("hologram.status.pracuje", "<green>Pracuje"),
                 reader.getString("hologram.status.pelny", "<red>Magazyn pełny"),
                 reader.getString("hologram.status.brak-miejsca", "<yellow>Brak miejsca do pracy"),
-                reader.getString("hologram.status.oczekuje", "<gray>Oczekuje")
+                reader.getString("hologram.status.oczekuje", "<gray>Oczekuje"),
+                reader.getString("hologram.status.brak-celu", "<yellow>Brak celu pracy")
         );
     }
 }

@@ -5,7 +5,7 @@
 # ==========================================================
 
 # Wersja pliku konfiguracyjnego - nie zmieniaj ręcznie.
-wersja-configu: 1
+wersja-configu: 2
 
 baza-danych:
   # Nazwa pliku bazy SQLite w folderze pluginu.
@@ -36,6 +36,10 @@ limity:
   # Czy permisja miniony.limit.bypass ignoruje także twardy sufit.
   bypass-ignoruje-maksimum: true
 
+ulepszanie:
+  # true = ulepszać może tylko właściciel miniona (i administrator), false = każdy z dostępem do GUI.
+  tylko-wlasciciel: true
+
 zbieranie:
   # Przy zbieraniu miniona przenieś zawartość jego magazynu do ekwipunku gracza.
   # To, co się nie zmieści, zostaje w magazynie miniona (zapisane razem z nim) - nic nie wypada na ziemię.
@@ -45,7 +49,7 @@ hologram:
   wlaczony: true
   # Wysokość hologramu nad podstawą miniona (w blokach).
   wysokosc: 1.35
-  # Dostępne zmienne: <typ>, <poziom>, <rzadkosc>, <wlasciciel>, <zapelnienie>, <pojemnosc>, <status>
+  # Dostępne zmienne: <typ>, <poziom>, <max-poziom>, <rzadkosc>, <wlasciciel>, <zapelnienie>, <pojemnosc>, <status>
   linie:
     - '<gold><typ> <gray>[<white>Poz. <poziom></white>]'
     - '<gray>Właściciel: <white><wlasciciel>'
@@ -56,41 +60,496 @@ hologram:
     pelny: '<red>Magazyn pełny'
     brak-miejsca: '<yellow>Brak miejsca do pracy'
     oczekuje: '<gray>Oczekuje'
+    brak-celu: '<yellow>Brak celu pracy'
 
 # Nazwy rzadkości (w Etapie 3 rozbudowane o mnożniki).
 rzadkosci:
   ZWYKLY:
     nazwa: '<gray>Zwykły'
 
-# Typy minionów. Klucz sekcji to identyfikator typu używany w komendach.
+# Typy minionów. Klucz sekcji to identyfikator typu używany w komendach (/minion give <gracz> <typ>).
+# Każdy typ ma poziomy 1..N (sekcja "poziomy"). Wartości, których nie podasz w danym poziomie,
+# są dziedziczone z poprzedniego poziomu. "koszt" to koszt ulepszenia NA dany poziom:
+#   pieniadze: kwota pobierana przez Vault (0 = brak)
+#   przedmioty: lista 'MATERIAL:ilość' albo 'nexo:id_przedmiotu:ilość' (przedmioty Nexo)
+# Liczą się tylko "czyste" przedmioty (bez własnej nazwy/lore/enchantów) z głównego ekwipunku gracza.
+# Błędny wpis w koszcie blokuje ulepszenie na ten poziom (komunikat w konsoli).
+# wyglad: narzedzie (przedmiot w ręce, wpływa też na drop), kolor-zbroi (#RRGGBB), glowa-tekstura (base64, puste = zwykła głowa).
 typy:
   gornik:
     wlaczony: true
     nazwa: 'Górnik'
-    # Co ile sekund minion wykonuje jeden cykl pracy (postawienie albo wykopanie bloku).
-    interwal-sekundy: 15
-    # Zasięg pracy w blokach wokół miniona (1 = obszar 3x3, 2 = 5x5, ...). Pracuje na poziomie pod sobą.
-    zasieg: 2
-    # Pojemność magazynu w slotach (1-270).
-    pojemnosc: 9
-    # Blok, który minion stawia i wykopuje.
+    # Górnik pracuje na warstwie pod sobą: stawia blok w pustych miejscach, a gdy ich brak - wykopuje go.
     blok: COBBLESTONE
-    # Narzędzie trzymane przez miniona (wpływa na drop bloku).
-    narzedzie: WOODEN_PICKAXE
-    wyglad:
-      # Tekstura głowy (wartość base64 "textures"). Puste = zwykła głowa gracza.
-      glowa-tekstura: ''
-      # Kolor skórzanej zbroi w formacie #RRGGBB.
-      kolor-zbroi: '#7F7F7F'
     item:
       material: PLAYER_HEAD
-      # Dostępne zmienne: <typ>, <poziom>, <rzadkosc>, <zapelnienie>, <pojemnosc>
+      # Dostępne zmienne: <typ>, <poziom>, <max-poziom>, <rzadkosc>, <zapelnienie>, <pojemnosc>, <interwal>, <zasieg>, <mnoznik>
       nazwa: '<gold>Minion: <typ> <gray>[Poz. <poziom>]'
       lore:
         - '<gray>Rzadkość: <rzadkosc>'
+        - '<gray>Poziom: <white><poziom>/<max-poziom>'
         - '<gray>Magazyn: <white><zapelnienie>/<pojemnosc>'
         - ''
         - '<yellow>Kliknij prawym na blok wyspy, aby postawić.'
+    poziomy:
+      1:
+        interwal-sekundy: 15
+        pojemnosc: 9
+        zasieg: 2
+        mnoznik-dropu: 1.0
+        wyglad:
+          narzedzie: WOODEN_PICKAXE
+          kolor-zbroi: '#7F7F7F'
+      2:
+        interwal-sekundy: 13
+        pojemnosc: 18
+        zasieg: 2
+        mnoznik-dropu: 1.0
+        wyglad:
+          narzedzie: STONE_PICKAXE
+          kolor-zbroi: '#9E9E9E'
+        koszt:
+          pieniadze: 5000
+          przedmioty:
+            - 'COBBLESTONE:256'
+      3:
+        interwal-sekundy: 11
+        pojemnosc: 27
+        zasieg: 3
+        mnoznik-dropu: 1.25
+        wyglad:
+          narzedzie: IRON_PICKAXE
+          kolor-zbroi: '#D8D8D8'
+        koszt:
+          pieniadze: 15000
+          przedmioty:
+            - 'IRON_INGOT:32'
+      4:
+        interwal-sekundy: 9
+        pojemnosc: 36
+        zasieg: 3
+        mnoznik-dropu: 1.5
+        wyglad:
+          narzedzie: GOLDEN_PICKAXE
+          kolor-zbroi: '#FFD700'
+        koszt:
+          pieniadze: 40000
+          przedmioty:
+            - 'GOLD_INGOT:32'
+      5:
+        interwal-sekundy: 7
+        pojemnosc: 45
+        zasieg: 4
+        mnoznik-dropu: 2.0
+        wyglad:
+          narzedzie: DIAMOND_PICKAXE
+          kolor-zbroi: '#5DECF5'
+        koszt:
+          pieniadze: 100000
+          przedmioty:
+            - 'DIAMOND:16'
+            # przykład przedmiotu Nexo: - 'nexo:mithril_ingot:4'
+
+  drwal:
+    wlaczony: true
+    nazwa: 'Drwal'
+    # Drwal pracuje na swoim poziomie: stawia pnie na stałym gruncie i ścina je.
+    blok: OAK_LOG
+    item:
+      material: PLAYER_HEAD
+      # Dostępne zmienne: <typ>, <poziom>, <max-poziom>, <rzadkosc>, <zapelnienie>, <pojemnosc>, <interwal>, <zasieg>, <mnoznik>
+      nazwa: '<gold>Minion: <typ> <gray>[Poz. <poziom>]'
+      lore:
+        - '<gray>Rzadkość: <rzadkosc>'
+        - '<gray>Poziom: <white><poziom>/<max-poziom>'
+        - '<gray>Magazyn: <white><zapelnienie>/<pojemnosc>'
+        - ''
+        - '<yellow>Kliknij prawym na blok wyspy, aby postawić.'
+    poziomy:
+      1:
+        interwal-sekundy: 15
+        pojemnosc: 9
+        zasieg: 2
+        mnoznik-dropu: 1.0
+        wyglad:
+          narzedzie: WOODEN_AXE
+          kolor-zbroi: '#6B4423'
+      2:
+        interwal-sekundy: 13
+        pojemnosc: 18
+        zasieg: 2
+        mnoznik-dropu: 1.0
+        wyglad:
+          narzedzie: STONE_AXE
+          kolor-zbroi: '#7B5433'
+        koszt:
+          pieniadze: 5000
+          przedmioty:
+            - 'OAK_LOG:128'
+      3:
+        interwal-sekundy: 11
+        pojemnosc: 27
+        zasieg: 3
+        mnoznik-dropu: 1.25
+        wyglad:
+          narzedzie: IRON_AXE
+          kolor-zbroi: '#8B6443'
+        koszt:
+          pieniadze: 15000
+          przedmioty:
+            - 'IRON_INGOT:32'
+      4:
+        interwal-sekundy: 9
+        pojemnosc: 36
+        zasieg: 3
+        mnoznik-dropu: 1.5
+        wyglad:
+          narzedzie: GOLDEN_AXE
+          kolor-zbroi: '#A0522D'
+        koszt:
+          pieniadze: 40000
+          przedmioty:
+            - 'GOLD_INGOT:32'
+      5:
+        interwal-sekundy: 7
+        pojemnosc: 45
+        zasieg: 4
+        mnoznik-dropu: 2.0
+        wyglad:
+          narzedzie: DIAMOND_AXE
+          kolor-zbroi: '#C68E5A'
+        koszt:
+          pieniadze: 100000
+          przedmioty:
+            - 'DIAMOND:16'
+
+  farmer:
+    wlaczony: true
+    nazwa: 'Farmer'
+    # Farmer pracuje na swoim poziomie: zbiera dojrzałe uprawy i sadzi je ponownie,
+    # sadzi na wolnej ziemi uprawnej i przyspiesza wzrost.
+    # Obsługiwane uprawy: WHEAT, CARROTS, POTATOES, BEETROOTS, NETHER_WART (na piasku dusz).
+    uprawa: WHEAT
+    # Czy zamieniać ziemię/trawę pod wolnym miejscem na ziemię uprawną.
+    oraj-ziemie: true
+    # O ile etapów rośnie niedojrzała uprawa w jednym cyklu (1-10).
+    wzrost-na-cykl: 1
+    item:
+      material: PLAYER_HEAD
+      # Dostępne zmienne: <typ>, <poziom>, <max-poziom>, <rzadkosc>, <zapelnienie>, <pojemnosc>, <interwal>, <zasieg>, <mnoznik>
+      nazwa: '<gold>Minion: <typ> <gray>[Poz. <poziom>]'
+      lore:
+        - '<gray>Rzadkość: <rzadkosc>'
+        - '<gray>Poziom: <white><poziom>/<max-poziom>'
+        - '<gray>Magazyn: <white><zapelnienie>/<pojemnosc>'
+        - ''
+        - '<yellow>Kliknij prawym na blok wyspy, aby postawić.'
+    poziomy:
+      1:
+        interwal-sekundy: 15
+        pojemnosc: 9
+        zasieg: 2
+        mnoznik-dropu: 1.0
+        wyglad:
+          narzedzie: WOODEN_HOE
+          kolor-zbroi: '#4CAF50'
+      2:
+        interwal-sekundy: 13
+        pojemnosc: 18
+        zasieg: 2
+        mnoznik-dropu: 1.0
+        wyglad:
+          narzedzie: STONE_HOE
+          kolor-zbroi: '#43A047'
+        koszt:
+          pieniadze: 5000
+          przedmioty:
+            - 'WHEAT:128'
+      3:
+        interwal-sekundy: 11
+        pojemnosc: 27
+        zasieg: 3
+        mnoznik-dropu: 1.25
+        wyglad:
+          narzedzie: IRON_HOE
+          kolor-zbroi: '#388E3C'
+        koszt:
+          pieniadze: 15000
+          przedmioty:
+            - 'IRON_INGOT:32'
+      4:
+        interwal-sekundy: 9
+        pojemnosc: 36
+        zasieg: 3
+        mnoznik-dropu: 1.5
+        wyglad:
+          narzedzie: GOLDEN_HOE
+          kolor-zbroi: '#2E7D32'
+        koszt:
+          pieniadze: 40000
+          przedmioty:
+            - 'GOLD_INGOT:32'
+      5:
+        interwal-sekundy: 7
+        pojemnosc: 45
+        zasieg: 4
+        mnoznik-dropu: 2.0
+        wyglad:
+          narzedzie: DIAMOND_HOE
+          kolor-zbroi: '#1B5E20'
+        koszt:
+          pieniadze: 100000
+          przedmioty:
+            - 'DIAMOND:16'
+
+  rybak:
+    wlaczony: true
+    nazwa: 'Rybak'
+    # Rybak potrzebuje źródeł wody na warstwie pod sobą (w zasięgu). Nie zmienia bloków.
+    min-wody: 1
+    # Łup: 'MATERIAL:ilość:waga' albo 'MATERIAL:min-max:waga'. Szansa = waga / suma wag.
+    lup:
+      - 'COD:1:60'
+      - 'SALMON:1:25'
+      - 'PUFFERFISH:1:13'
+      - 'TROPICAL_FISH:1:2'
+      - 'INK_SAC:1-2:5'
+      - 'STRING:1-2:5'
+      - 'NAME_TAG:1:1'
+    item:
+      material: PLAYER_HEAD
+      # Dostępne zmienne: <typ>, <poziom>, <max-poziom>, <rzadkosc>, <zapelnienie>, <pojemnosc>, <interwal>, <zasieg>, <mnoznik>
+      nazwa: '<gold>Minion: <typ> <gray>[Poz. <poziom>]'
+      lore:
+        - '<gray>Rzadkość: <rzadkosc>'
+        - '<gray>Poziom: <white><poziom>/<max-poziom>'
+        - '<gray>Magazyn: <white><zapelnienie>/<pojemnosc>'
+        - ''
+        - '<yellow>Kliknij prawym na blok wyspy, aby postawić.'
+    poziomy:
+      1:
+        interwal-sekundy: 20
+        pojemnosc: 9
+        zasieg: 3
+        mnoznik-dropu: 1.0
+        wyglad:
+          narzedzie: FISHING_ROD
+          kolor-zbroi: '#2E6DB4'
+      2:
+        interwal-sekundy: 17
+        pojemnosc: 18
+        zasieg: 3
+        mnoznik-dropu: 1.0
+        wyglad:
+          narzedzie: FISHING_ROD
+          kolor-zbroi: '#2A62A2'
+        koszt:
+          pieniadze: 5000
+          przedmioty:
+            - 'COD:64'
+      3:
+        interwal-sekundy: 14
+        pojemnosc: 27
+        zasieg: 4
+        mnoznik-dropu: 1.25
+        wyglad:
+          narzedzie: FISHING_ROD
+          kolor-zbroi: '#255790'
+        koszt:
+          pieniadze: 15000
+          przedmioty:
+            - 'IRON_INGOT:32'
+      4:
+        interwal-sekundy: 11
+        pojemnosc: 36
+        zasieg: 4
+        mnoznik-dropu: 1.5
+        wyglad:
+          narzedzie: FISHING_ROD
+          kolor-zbroi: '#204C7E'
+        koszt:
+          pieniadze: 40000
+          przedmioty:
+            - 'GOLD_INGOT:32'
+      5:
+        interwal-sekundy: 8
+        pojemnosc: 45
+        zasieg: 5
+        mnoznik-dropu: 2.0
+        wyglad:
+          narzedzie: FISHING_ROD
+          kolor-zbroi: '#1A3F6C'
+        koszt:
+          pieniadze: 100000
+          przedmioty:
+            - 'DIAMOND:16'
+
+  zabojca:
+    wlaczony: true
+    nazwa: 'Zabójca'
+    # Zabójca zabija moby z listy w zasięgu (tylko na wyspie miniona). Drop trafia do magazynu.
+    # Nazwy mobów: https://jd.papermc.io/paper/org/bukkit/entity/EntityType.html
+    moby:
+      - ZOMBIE
+      - SKELETON
+      - SPIDER
+      - CAVE_SPIDER
+      - CREEPER
+      - ENDERMAN
+      - BLAZE
+      - WITCH
+      - SLIME
+      - MAGMA_CUBE
+    # Zasięg w pionie (w górę i w dół) - zasięg poziomy wynika z poziomu miniona.
+    zasieg-pionowy: 2
+    # Pomijaj moby z własną nazwą (np. z name taga).
+    pomijaj-nazwane: true
+    # Czy zabite moby upuszczają doświadczenie.
+    upuszczaj-exp: true
+    zabicia-na-cykl: 1
+    item:
+      material: PLAYER_HEAD
+      # Dostępne zmienne: <typ>, <poziom>, <max-poziom>, <rzadkosc>, <zapelnienie>, <pojemnosc>, <interwal>, <zasieg>, <mnoznik>
+      nazwa: '<gold>Minion: <typ> <gray>[Poz. <poziom>]'
+      lore:
+        - '<gray>Rzadkość: <rzadkosc>'
+        - '<gray>Poziom: <white><poziom>/<max-poziom>'
+        - '<gray>Magazyn: <white><zapelnienie>/<pojemnosc>'
+        - ''
+        - '<yellow>Kliknij prawym na blok wyspy, aby postawić.'
+    poziomy:
+      1:
+        interwal-sekundy: 20
+        pojemnosc: 9
+        zasieg: 3
+        mnoznik-dropu: 1.0
+        wyglad:
+          narzedzie: WOODEN_SWORD
+          kolor-zbroi: '#8B0000'
+      2:
+        interwal-sekundy: 17
+        pojemnosc: 18
+        zasieg: 3
+        mnoznik-dropu: 1.0
+        wyglad:
+          narzedzie: STONE_SWORD
+          kolor-zbroi: '#9B1010'
+        koszt:
+          pieniadze: 5000
+          przedmioty:
+            - 'ROTTEN_FLESH:128'
+      3:
+        interwal-sekundy: 14
+        pojemnosc: 27
+        zasieg: 4
+        mnoznik-dropu: 1.25
+        wyglad:
+          narzedzie: IRON_SWORD
+          kolor-zbroi: '#AB2020'
+        koszt:
+          pieniadze: 15000
+          przedmioty:
+            - 'IRON_INGOT:32'
+      4:
+        interwal-sekundy: 11
+        pojemnosc: 36
+        zasieg: 4
+        mnoznik-dropu: 1.5
+        wyglad:
+          narzedzie: GOLDEN_SWORD
+          kolor-zbroi: '#C03030'
+        koszt:
+          pieniadze: 40000
+          przedmioty:
+            - 'GOLD_INGOT:32'
+      5:
+        interwal-sekundy: 8
+        pojemnosc: 45
+        zasieg: 5
+        mnoznik-dropu: 2.0
+        wyglad:
+          narzedzie: DIAMOND_SWORD
+          kolor-zbroi: '#E04040'
+        koszt:
+          pieniadze: 100000
+          przedmioty:
+            - 'DIAMOND:16'
+
+  zbieracz:
+    wlaczony: true
+    nazwa: 'Zbieracz'
+    # Zbieracz podnosi leżące przedmioty w zasięgu (tylko na wyspie miniona). Mnożnik dropu go nie dotyczy.
+    zasieg-pionowy: 2
+    # Ile stosów przedmiotów może podnieść w jednym cyklu.
+    stosy-na-cykl: 4
+    item:
+      material: PLAYER_HEAD
+      # Dostępne zmienne: <typ>, <poziom>, <max-poziom>, <rzadkosc>, <zapelnienie>, <pojemnosc>, <interwal>, <zasieg>, <mnoznik>
+      nazwa: '<gold>Minion: <typ> <gray>[Poz. <poziom>]'
+      lore:
+        - '<gray>Rzadkość: <rzadkosc>'
+        - '<gray>Poziom: <white><poziom>/<max-poziom>'
+        - '<gray>Magazyn: <white><zapelnienie>/<pojemnosc>'
+        - ''
+        - '<yellow>Kliknij prawym na blok wyspy, aby postawić.'
+    poziomy:
+      1:
+        interwal-sekundy: 10
+        pojemnosc: 9
+        zasieg: 3
+        mnoznik-dropu: 1.0
+        wyglad:
+          narzedzie: HOPPER
+          kolor-zbroi: '#7F7F7F'
+      2:
+        interwal-sekundy: 8
+        pojemnosc: 18
+        zasieg: 3
+        mnoznik-dropu: 1.0
+        wyglad:
+          narzedzie: HOPPER
+          kolor-zbroi: '#9E9E9E'
+        koszt:
+          pieniadze: 5000
+          przedmioty:
+            - 'HOPPER:4'
+      3:
+        interwal-sekundy: 6
+        pojemnosc: 27
+        zasieg: 4
+        mnoznik-dropu: 1.0
+        wyglad:
+          narzedzie: HOPPER
+          kolor-zbroi: '#D8D8D8'
+        koszt:
+          pieniadze: 15000
+          przedmioty:
+            - 'IRON_INGOT:32'
+      4:
+        interwal-sekundy: 5
+        pojemnosc: 36
+        zasieg: 4
+        mnoznik-dropu: 1.0
+        wyglad:
+          narzedzie: HOPPER
+          kolor-zbroi: '#FFD700'
+        koszt:
+          pieniadze: 40000
+          przedmioty:
+            - 'GOLD_INGOT:32'
+      5:
+        interwal-sekundy: 3
+        pojemnosc: 45
+        zasieg: 5
+        mnoznik-dropu: 1.0
+        wyglad:
+          narzedzie: HOPPER
+          kolor-zbroi: '#5DECF5'
+        koszt:
+          pieniadze: 100000
+          przedmioty:
+            - 'DIAMOND:16'
+
 
 gui:
   # Dostępne zmienne: <typ>, <poziom>, <strona>, <strony>
@@ -120,15 +579,17 @@ gui:
       slot: 49
       material: BOOK
       nazwa: '<gold>Informacje'
-      # Dostępne zmienne: <typ>, <poziom>, <rzadkosc>, <wlasciciel>, <zapelnienie>, <pojemnosc>, <status>, <interwal>, <zasieg>
+      # Dostępne zmienne: <typ>, <poziom>, <max-poziom>, <rzadkosc>, <wlasciciel>, <zapelnienie>, <pojemnosc>,
+      # <status>, <interwal>, <zasieg>, <mnoznik>
       lore:
         - '<gray>Typ: <white><typ>'
-        - '<gray>Poziom: <white><poziom>'
+        - '<gray>Poziom: <white><poziom>/<max-poziom>'
         - '<gray>Rzadkość: <rzadkosc>'
         - '<gray>Właściciel: <white><wlasciciel>'
         - '<gray>Magazyn: <white><zapelnienie>/<pojemnosc>'
         - '<gray>Cykl pracy: <white>co <interwal> s'
         - '<gray>Zasięg: <white><zasieg>'
+        - '<gray>Mnożnik dropu: <white>x<mnoznik>'
         - '<gray>Status: <status>'
     zbierz-miniona:
       slot: 50
@@ -137,6 +598,30 @@ gui:
       lore:
         - '<gray>Zabiera miniona do ekwipunku.'
         - '<gray>Dostępne tylko dla właściciela.'
+    ulepsz:
+      slot: 46
+      material: EXPERIENCE_BOTTLE
+      # Dostępne zmienne: jak w "informacje" oraz <nastepny-poziom>, <nowy-interwal>, <nowa-pojemnosc>,
+      # <nowy-zasieg>, <nowy-mnoznik>. Linia zawierająca tylko '<koszt>' zostanie zastąpiona listą kosztów.
+      nazwa: '<green>Ulepsz do poziomu <nastepny-poziom>'
+      lore:
+        - '<gray>Cykl pracy: <white><interwal> s</white> → <green><nowy-interwal> s'
+        - '<gray>Pojemność: <white><pojemnosc></white> → <green><nowa-pojemnosc>'
+        - '<gray>Zasięg: <white><zasieg></white> → <green><nowy-zasieg>'
+        - '<gray>Mnożnik dropu: <white>x<mnoznik></white> → <green>x<nowy-mnoznik>'
+        - ''
+        - '<gray>Koszt:'
+        - '<koszt>'
+        - ''
+        - '<yellow>Kliknij, aby ulepszyć.'
+      koszt-pieniadze: '<gray> - <gold><kwota>'
+      koszt-przedmiot: '<gray> - <white><ilosc>x </white><nazwa>'
+      koszt-darmowy: '<gray> - <green>Darmowe'
+    ulepsz-max:
+      material: NETHER_STAR
+      nazwa: '<gold>Maksymalny poziom'
+      lore:
+        - '<gray>Ten minion osiągnął maksymalny poziom.'
     zamknij:
       slot: 52
       material: OAK_DOOR
@@ -156,7 +641,8 @@ wiadomosci:
   nieznany-typ: '<red> ❌ Nieznany typ miniona: <typ>. Dostępne: <typy>.'
   nieprawidlowa-liczba: '<red> ❌ Nieprawidłowa liczba: <wartosc>.'
   nieznana-komenda: '<red> ❌ Nieznana komenda. Wpisz /minion pomoc.'
-  uzycie-give: '<red> ❌ Użycie: /minion give <gracz> <typ> [ilość]'
+  uzycie-give: '<red> ❌ Użycie: /minion give <gracz> <typ> [ilość] [poziom]'
+  nieprawidlowy-poziom: '<red> ❌ Nieprawidłowy poziom: <wartosc>. Dozwolone: 1-<max>.'
   przeladowano: '<green> ✔ Przeładowano konfigurację.'
   przeladowanie-blad: '<red> ❌ Nie udało się przeładować konfiguracji, szczegóły w konsoli.'
   dano-miniona: '<green> ✔ Dano <ilosc>x miniona <typ> graczowi <gracz>.'
@@ -179,6 +665,14 @@ wiadomosci:
   minion-niedostepny: '<red> ❌ Ten minion nie jest już dostępny.'
   zwrocono-miniony: '<green> ✔ Zwrócono Ci <ilosc> minion(ów) z usuniętej wyspy.'
   ekwipunek-pelny-zwrot: '<red> ❌ Masz pełny ekwipunek. Zwolnij miejsce i wpisz /minion odbierz, aby odebrać <ilosc> minion(ów).'
+  ulepszono: '<green> ✔ Ulepszono miniona <typ> do poziomu <poziom>.'
+  maks-poziom: '<red> ❌ Ten minion ma już maksymalny poziom.'
+  tylko-wlasciciel-ulepsza: '<red> ❌ Tylko właściciel może ulepszyć tego miniona.'
+  brak-pieniedzy: '<red> ❌ Nie masz wystarczająco pieniędzy. Potrzebujesz: <kwota>.'
+  brak-przedmiotow: '<red> ❌ Brakuje przedmiotów: <brakujace>.'
+  ekonomia-niedostepna: '<red> ❌ Ekonomia jest niedostępna - ulepszenia za pieniądze są wyłączone.'
+  koszt-niedostepny: '<red> ❌ Ulepszenie jest chwilowo niedostępne (błąd kosztu). Zgłoś to administracji.'
+  blad-transakcji: '<red> ❌ Nie udało się pobrać opłaty. Spróbuj ponownie.'
   brak-do-odebrania: '<red> ❌ Nie masz minionów do odebrania.'
   limit-info: '<gray>Miniony gracza <white><gracz></white>: <white><liczba></white>/<white><limit></white>'
   limit-bez-limitu: 'bez limitu'
@@ -192,7 +686,7 @@ wiadomosci:
     - '<yellow>/minion limit <gray>- Twój limit minionów'
     - '<yellow>/minion odbierz <gray>- odbierz miniony z usuniętej wyspy'
   pomoc-admin:
-    - '<yellow>/minion give <gracz> <typ> [ilość] <gray>- daj miniona'
+    - '<yellow>/minion give <gracz> <typ> [ilość] [poziom] <gray>- daj miniona'
     - '<yellow>/minion list <gracz> <gray>- lista minionów gracza'
     - '<yellow>/minion limit <gracz> <gray>- limit gracza'
     - '<yellow>/minion reload <gray>- przeładuj konfigurację'

@@ -46,8 +46,8 @@ public final class MinionItems {
         MinionType type = plugin.types().get(minion.typeId());
         TypeSettings ts = type != null ? type.settings() : null;
         Material material = ts != null ? ts.itemMaterial() : Material.PLAYER_HEAD;
-        ItemStack item = material == Material.PLAYER_HEAD && ts != null
-                ? head(ts.headTexture())
+        ItemStack item = material == Material.PLAYER_HEAD && type != null
+                ? head(type.level(minion).appearance().headTexture())
                 : new ItemStack(material);
         TagResolver resolver = MinionPlaceholders.of(plugin, minion);
         ItemMeta meta = item.getItemMeta();

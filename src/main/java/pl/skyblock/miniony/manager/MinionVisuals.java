@@ -18,7 +18,7 @@ import org.bukkit.inventory.meta.LeatherArmorMeta;
 import org.bukkit.persistence.PersistentDataType;
 import pl.skyblock.miniony.MinionyPlugin;
 import pl.skyblock.miniony.config.HologramSettings;
-import pl.skyblock.miniony.config.TypeSettings;
+import pl.skyblock.miniony.config.Appearance;
 import pl.skyblock.miniony.message.Text;
 import pl.skyblock.miniony.model.Minion;
 import pl.skyblock.miniony.type.MinionType;
@@ -80,7 +80,7 @@ public final class MinionVisuals {
     public void spawn(Minion minion, World world) {
         despawn(minion);
         MinionType type = plugin.types().get(minion.typeId());
-        TypeSettings ts = type != null ? type.settings() : null;
+        Appearance look = type != null ? type.level(minion).appearance() : null;
         Location base = baseLocation(minion, world);
         String tag = minion.id().toString();
 
@@ -100,12 +100,12 @@ public final class MinionVisuals {
             s.setDisabledSlots(EquipmentSlot.HAND, EquipmentSlot.OFF_HAND, EquipmentSlot.HEAD,
                     EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET);
             EntityEquipment eq = s.getEquipment();
-            eq.setHelmet(plugin.items().head(ts != null ? ts.headTexture() : ""), true);
-            if (ts != null) {
-                eq.setChestplate(leather(Material.LEATHER_CHESTPLATE, ts), true);
-                eq.setLeggings(leather(Material.LEATHER_LEGGINGS, ts), true);
-                eq.setBoots(leather(Material.LEATHER_BOOTS, ts), true);
-                eq.setItemInMainHand(new ItemStack(ts.tool()), true);
+            eq.setHelmet(plugin.items().head(look != null ? look.headTexture() : ""), true);
+            if (look != null) {
+                eq.setChestplate(leather(Material.LEATHER_CHESTPLATE, look), true);
+                eq.setLeggings(leather(Material.LEATHER_LEGGINGS, look), true);
+                eq.setBoots(leather(Material.LEATHER_BOOTS, look), true);
+                eq.setItemInMainHand(new ItemStack(look.tool()), true);
             }
         });
         minion.setBody(stand);
@@ -126,10 +126,10 @@ public final class MinionVisuals {
         minion.setHologramCache(hologramKey(minion));
     }
 
-    private static ItemStack leather(Material material, TypeSettings ts) {
+    private static ItemStack leather(Material material, Appearance look) {
         ItemStack item = new ItemStack(material);
         if (item.getItemMeta() instanceof LeatherArmorMeta meta) {
-            meta.setColor(ts.armorColor());
+            meta.setColor(look.armorColor());
             item.setItemMeta(meta);
         }
         return item;

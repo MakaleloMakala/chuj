@@ -170,6 +170,32 @@ public final class MinionStorage {
         return amount;
     }
 
+    /** Liczba wolnych slotów w granicach pojemności. */
+    public int freeSlots() {
+        int free = 0;
+        int limit = Math.min(capacity, slots.length);
+        for (int i = 0; i < limit; i++) {
+            if (slots[i] == null) {
+                free++;
+            }
+        }
+        return free;
+    }
+
+    /**
+     * Dodaje tyle sztuk przedmiotu, ile się zmieści. Zwraca liczbę sztuk, które się nie zmieściły.
+     */
+    public int addPartial(ItemStack item) {
+        if (isEmpty(item)) {
+            return 0;
+        }
+        ItemStack[] view = new ItemStack[Math.min(capacity, slots.length)];
+        System.arraycopy(slots, 0, view, 0, view.length);
+        int left = insert(view, item.clone());
+        System.arraycopy(view, 0, slots, 0, view.length);
+        return left;
+    }
+
     /** Kopia zawartości do zapisu. */
     public ItemStack[] snapshot() {
         ItemStack[] copy = new ItemStack[slots.length];

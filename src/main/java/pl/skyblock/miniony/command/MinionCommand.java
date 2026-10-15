@@ -86,6 +86,20 @@ public final class MinionCommand implements TabExecutor {
             return;
         }
         int amount = 1;
+        int level = 1;
+        if (args.length >= 5) {
+            int max = type.settings().maxLevel();
+            try {
+                level = Integer.parseInt(args[4]);
+            } catch (NumberFormatException e) {
+                level = -1;
+            }
+            if (level < 1 || level > max) {
+                msg.send(sender, "nieprawidlowy-poziom", Placeholder.unparsed("wartosc", args[4]),
+                        Placeholder.unparsed("max", String.valueOf(max)));
+                return;
+            }
+        }
         if (args.length >= 4) {
             try {
                 amount = Integer.parseInt(args[3]);
@@ -98,7 +112,7 @@ public final class MinionCommand implements TabExecutor {
             }
         }
         for (int i = 0; i < amount; i++) {
-            Minion minion = plugin.minions().createItemMinion(type, target);
+            Minion minion = plugin.minions().createItemMinion(type, target, level);
             ItemStack item = plugin.items().create(minion);
             Map<Integer, ItemStack> rest = target.getInventory().addItem(item);
             for (ItemStack r : rest.values()) {
@@ -259,6 +273,16 @@ public final class MinionCommand implements TabExecutor {
         }
         if (args.length == 4 && "give".equals(sub) && sender.hasPermission(PERM_GIVE)) {
             return filter(List.of("1", "5", "10"), args[3]);
+        }
+        if (args.length == 5 && "give".equals(sub) && sender.hasPermission(PERM_GIVE)) {
+            MinionType type = plugin.types().get(args[2]);
+            List<String> levels = new ArrayList<>();
+            if (type != null) {
+                for (int i = 1; i <= type.settings().maxLevel(); i++) {
+                    levels.add(String.valueOf(i));
+                }
+            }
+            return filter(levels, args[4]);
         }
         return List.of();
     }

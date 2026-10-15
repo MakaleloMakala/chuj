@@ -1,6 +1,5 @@
 package pl.skyblock.miniony.type;
 
-import org.bukkit.configuration.ConfigurationSection;
 import pl.skyblock.miniony.config.ConfigReader;
 
 import java.util.Collection;
@@ -34,12 +33,9 @@ public final class MinionTypeRegistry {
         for (MinionType type : types.values()) {
             type.load(reader);
         }
-        ConfigurationSection section = reader.getSection("typy");
-        if (section != null) {
-            for (String key : section.getKeys(false)) {
-                if (!types.containsKey(key.toLowerCase(Locale.ROOT))) {
-                    reader.warn("Nieznany typ miniona 'typy." + key + "' - pomijam.");
-                }
+        for (String key : reader.keys("typy")) {
+            if (!types.containsKey(key.toLowerCase(Locale.ROOT))) {
+                reader.warn("Nieznany typ miniona 'typy." + key + "' - pomijam.");
             }
         }
     }

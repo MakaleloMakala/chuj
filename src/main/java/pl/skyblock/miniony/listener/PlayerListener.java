@@ -33,5 +33,6 @@ public final class PlayerListener implements Listener {
     @EventHandler(priority = EventPriority.MONITOR)
     public void onQuit(PlayerQuitEvent event) {
         plugin.limits().invalidate(event.getPlayer().getUniqueId());
+        plugin.upgrades().forget(event.getPlayer().getUniqueId());
     }
 }

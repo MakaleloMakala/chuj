@@ -4,7 +4,7 @@ import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import pl.skyblock.miniony.MinionyPlugin;
 import pl.skyblock.miniony.config.HologramSettings;
-import pl.skyblock.miniony.config.TypeSettings;
+import pl.skyblock.miniony.config.LevelSettings;
 import pl.skyblock.miniony.message.Text;
 import pl.skyblock.miniony.model.Minion;
 import pl.skyblock.miniony.model.MinionStatus;
@@ -28,12 +28,13 @@ public final class MinionPlaceholders {
             case STORAGE_FULL -> h.statusFull();
             case NO_SPACE -> h.statusNoSpace();
             case IDLE -> h.statusIdle();
+            case NO_TARGET -> h.statusNoTarget();
         };
     }
 
     public static TagResolver of(MinionyPlugin plugin, Minion minion) {
         MinionType type = plugin.types().get(minion.typeId());
-        TypeSettings ts = type != null ? type.settings() : null;
+        LevelSettings level = type != null ? type.level(minion) : null;
         return TagResolver.resolver(
                 Placeholder.component("typ", Text.parse(typeName(plugin, minion.typeId()))),
                 Placeholder.unparsed("poziom", String.valueOf(minion.level())),
@@ -42,8 +43,18 @@ public final class MinionPlaceholders {
                 Placeholder.unparsed("zapelnienie", String.valueOf(minion.storage().usedSlots())),
                 Placeholder.unparsed("pojemnosc", String.valueOf(minion.storage().capacity())),
                 Placeholder.component("status", Text.parse(statusRaw(plugin, minion.status()))),
-                Placeholder.unparsed("interwal", ts == null ? "?" : String.valueOf(ts.intervalSeconds())),
-                Placeholder.unparsed("zasieg", ts == null ? "?" : String.valueOf(ts.range()))
+                Placeholder.unparsed("interwal", level == null ? "?" : String.valueOf(level.intervalSeconds())),
+                Placeholder.unparsed("zasieg", level == null ? "?" : String.valueOf(level.range())),
+                Placeholder.unparsed("mnoznik", level == null ? "?" : formatMultiplier(level.dropMultiplier())),
+                Placeholder.unparsed("max-poziom", type == null ? "?" : String.valueOf(type.settings().maxLevel()))
         );
+    }
+
+    /** 1.0 -> "1", 1.25 -> "1.25" */
+    public static String formatMultiplier(double value) {
+        if (value == Math.rint(value)) {
+            return String.valueOf((long) value);
+        }
+        return java.math.BigDecimal.valueOf(value).setScale(2, java.math.RoundingMode.HALF_UP).stripTrailingZeros().toPlainString();
     }
 }

@@ -6,6 +6,7 @@ import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.HandlerList;
+import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.java.JavaPlugin;
 import pl.skyblock.miniony.command.MinionCommand;
@@ -14,10 +15,13 @@ import pl.skyblock.miniony.config.PluginSettings;
 import pl.skyblock.miniony.data.Database;
 import pl.skyblock.miniony.data.MinionSnapshot;
 import pl.skyblock.miniony.gui.MinionGui;
+import pl.skyblock.miniony.hook.EconomyHook;
 import pl.skyblock.miniony.hook.IslandHook;
 import pl.skyblock.miniony.hook.LuckPermsHook;
+import pl.skyblock.miniony.hook.NexoHook;
 import pl.skyblock.miniony.hook.NoIslandHook;
 import pl.skyblock.miniony.hook.SuperiorSkyblockHook;
+import pl.skyblock.miniony.hook.VaultEconomyHook;
 import pl.skyblock.miniony.limit.LimitService;
 import pl.skyblock.miniony.listener.ChunkListener;
 import pl.skyblock.miniony.listener.EntityListener;
@@ -26,8 +30,14 @@ import pl.skyblock.miniony.listener.PlayerListener;
 import pl.skyblock.miniony.manager.MinionItems;
 import pl.skyblock.miniony.manager.MinionManager;
 import pl.skyblock.miniony.manager.MinionVisuals;
+import pl.skyblock.miniony.manager.UpgradeService;
 import pl.skyblock.miniony.message.Messages;
+import pl.skyblock.miniony.type.CollectorType;
+import pl.skyblock.miniony.type.FarmerType;
+import pl.skyblock.miniony.type.FisherType;
+import pl.skyblock.miniony.type.LumberjackType;
 import pl.skyblock.miniony.type.MinerType;
+import pl.skyblock.miniony.type.SlayerType;
 import pl.skyblock.miniony.type.MinionTypeRegistry;
 
 import java.io.File;
@@ -40,6 +50,8 @@ import java.util.logging.Level;
 
 public final class MinionyPlugin extends JavaPlugin {
 
+    private static final int CONFIG_VERSION = 2;
+
     private PluginSettings settings;
     private Messages messages;
     private MinionTypeRegistry types;
@@ -51,12 +63,20 @@ public final class MinionyPlugin extends JavaPlugin {
     private LimitService limits;
     private IslandHook islands = new NoIslandHook();
     private LuckPermsHook luckPerms;
+    private EconomyHook economy = EconomyHook.NONE;
+    private NexoHook nexo = NexoHook.disabled();
+    private UpgradeService upgrades;
 
     @Override
     public void onEnable() {
         saveDefaultConfig();
         types = new MinionTypeRegistry();
         types.register(new MinerType());
+        types.register(new LumberjackType());
+        types.register(new FarmerType());
+        types.register(new FisherType());
+        types.register(new SlayerType());
+        types.register(new CollectorType());
         messages = new Messages(getLogger());
         if (!loadConfiguration(true)) {
             getServer().getPluginManager().disablePlugin(this);
@@ -84,6 +104,7 @@ public final class MinionyPlugin extends JavaPlugin {
 
         minions = new MinionManager(this);
         minions.load(snapshots);
+        upgrades = new UpgradeService(this);
         gui = new MinionGui(this);
 
         PluginManager pm = getServer().getPluginManager();
@@ -107,7 +128,8 @@ public final class MinionyPlugin extends JavaPlugin {
             limits.refresh(player);
         }
         getLogger().info("Miniony włączone. Integracje: SuperiorSkyblock2=" + islands.isEnabled()
-                + ", LuckPerms=" + (luckPerms != null));
+                + ", LuckPerms=" + (luckPerms != null) + ", Vault=" + (economy != EconomyHook.NONE)
+                + ", Nexo=" + nexo.isAvailable());
     }
 
     private void setupHooks() {
@@ -134,6 +156,22 @@ public final class MinionyPlugin extends JavaPlugin {
             getLogger().info("Brak LuckPerms - limity liczone z uprawnień Bukkit, bez automatycznego odświeżania.");
         }
         limits.setLuckPerms(luckPerms);
+
+        economy = EconomyHook.NONE;
+        if (pm.isPluginEnabled("Vault")) {
+            try {
+                economy = new VaultEconomyHook(getLogger());
+            } catch (Throwable t) {
+                getLogger().log(Level.WARNING, "Nie udało się podłączyć do Vault - koszty pieniężne są niedostępne.", t);
+            }
+        } else {
+            getLogger().info("Brak Vault - ulepszenia za pieniądze są niedostępne.");
+        }
+        nexo = NexoHook.disabled();
+        Plugin nexoPlugin = pm.getPlugin("Nexo");
+        if (nexoPlugin != null && nexoPlugin.isEnabled()) {
+            nexo = NexoHook.create(nexoPlugin, getLogger());
+        }
     }
 
     @Override
@@ -187,6 +225,12 @@ public final class MinionyPlugin extends JavaPlugin {
             getLogger().log(Level.WARNING, "Nie można odczytać domyślnego config.yml z pliku jar", e);
         }
         ConfigReader reader = new ConfigReader(yaml, getLogger());
+        int version = yaml.getInt("wersja-configu", 0);
+        if (version < CONFIG_VERSION && yaml.contains("wersja-configu", true)) {
+            getLogger().warning("[Konfiguracja] config.yml jest w starszej wersji (" + version + ", aktualna: " + CONFIG_VERSION
+                    + "). Brakujące wartości zostaną wzięte z domyślnego configu - porównaj plik z nowym config.yml"
+                    + " (np. usuń go, aby wygenerować nowy) i ustaw wersja-configu: " + CONFIG_VERSION + ".");
+        }
         PluginSettings newSettings = PluginSettings.read(reader);
         if (settings != null && !settings.databaseFile().equals(newSettings.databaseFile())) {
             getLogger().warning("[Konfiguracja] Zmiana 'baza-danych.plik' wymaga restartu serwera.");
@@ -252,5 +296,17 @@ public final class MinionyPlugin extends JavaPlugin {
 
     public IslandHook islands() {
         return islands;
+    }
+
+    public EconomyHook economy() {
+        return economy;
+    }
+
+    public NexoHook nexo() {
+        return nexo;
+    }
+
+    public UpgradeService upgrades() {
+        return upgrades;
     }
 }

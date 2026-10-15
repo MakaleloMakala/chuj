@@ -8,6 +8,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityCombustEvent;
+import org.bukkit.event.entity.EntityDeathEvent;
 import org.bukkit.event.player.PlayerArmorStandManipulateEvent;
 import org.bukkit.event.player.PlayerInteractAtEntityEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
@@ -88,6 +89,12 @@ public final class EntityListener implements Listener {
         if (plugin.visuals().isMinionEntity(event.getEntity())) {
             event.setCancelled(true);
         }
+    }
+
+    /** MONITOR + ignoreCancelled: drop trafia do magazynu tylko, gdy śmierć faktycznie nastąpiła. */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onDeath(EntityDeathEvent event) {
+        plugin.minions().onEntityDeath(event);
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)

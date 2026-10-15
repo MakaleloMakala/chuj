@@ -19,11 +19,13 @@ import org.bukkit.inventory.meta.ItemMeta;
 import pl.skyblock.miniony.MinionyPlugin;
 import pl.skyblock.miniony.config.ButtonSettings;
 import pl.skyblock.miniony.config.GuiSettings;
+import pl.skyblock.miniony.config.LevelSettings;
 import pl.skyblock.miniony.manager.MinionPlaceholders;
 import pl.skyblock.miniony.message.Text;
 import pl.skyblock.miniony.model.Minion;
 import pl.skyblock.miniony.model.MinionState;
 import pl.skyblock.miniony.model.MinionStorage;
+import pl.skyblock.miniony.type.MinionType;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -105,9 +107,43 @@ public final class MinionGui implements Listener {
             button(inv, gui.nextPage(), resolver);
         }
         button(inv, gui.collectAll(), resolver);
+        upgradeButton(inv, minion, resolver);
         button(inv, gui.info(), resolver);
         button(inv, gui.pickup(), resolver);
         button(inv, gui.close(), resolver);
+    }
+
+    private void upgradeButton(Inventory inv, Minion minion, TagResolver resolver) {
+        GuiSettings gui = plugin.settings().gui();
+        MinionType type = plugin.types().get(minion.typeId());
+        if (type == null || minion.level() >= type.settings().maxLevel()) {
+            button(inv, gui.upgradeMax(), resolver);
+            return;
+        }
+        LevelSettings next = type.settings().level(minion.level() + 1);
+        TagResolver full = TagResolver.resolver(resolver,
+                Placeholder.unparsed("nastepny-poziom", String.valueOf(next.level())),
+                Placeholder.unparsed("nowy-interwal", String.valueOf(next.intervalSeconds())),
+                Placeholder.unparsed("nowa-pojemnosc", String.valueOf(next.capacity())),
+                Placeholder.unparsed("nowy-zasieg", String.valueOf(next.range())),
+                Placeholder.unparsed("nowy-mnoznik", MinionPlaceholders.formatMultiplier(next.dropMultiplier())));
+        ButtonSettings b = gui.upgrade();
+        ItemStack item = new ItemStack(b.material());
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.displayName(Text.item(b.name(), full));
+            List<Component> lore = new ArrayList<>();
+            for (String line : b.lore()) {
+                if (line.trim().equals("<koszt>")) {
+                    lore.addAll(plugin.upgrades().costLines(next.cost()));
+                } else {
+                    lore.add(Text.item(line, full));
+                }
+            }
+            meta.lore(lore);
+            item.setItemMeta(meta);
+        }
+        inv.setItem(b.slot(), item);
     }
 
     private static void button(Inventory inv, ButtonSettings b, TagResolver resolver) {
@@ -262,6 +298,8 @@ public final class MinionGui implements Listener {
             takeSlot(player, minion, holder.page() * GuiSettings.STORAGE_SLOTS + slot);
         } else if (slot == gui.collectAll().slot()) {
             collectAll(player, minion);
+        } else if (slot == gui.upgrade().slot()) {
+            plugin.upgrades().upgrade(player, minion);
         } else if (slot == gui.pickup().slot()) {
             player.closeInventory();
             plugin.minions().pickup(player, minion);

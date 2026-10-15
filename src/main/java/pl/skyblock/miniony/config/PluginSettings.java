@@ -1,7 +1,5 @@
 package pl.skyblock.miniony.config;
 
-import org.bukkit.configuration.ConfigurationSection;
-
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -18,6 +16,7 @@ public record PluginSettings(
         int maxLimit,
         boolean bypassIgnoresMax,
         boolean pickupReturnsStorage,
+        boolean upgradeOwnerOnly,
         HologramSettings hologram,
         Map<String, String> rarityNames,
         GuiSettings gui
@@ -44,14 +43,12 @@ public record PluginSettings(
         }
         boolean bypassIgnoresMax = reader.getBoolean("limity.bypass-ignoruje-maksimum", true);
         boolean returnStorage = reader.getBoolean("zbieranie.oddaj-magazyn", true);
+        boolean upgradeOwnerOnly = reader.getBoolean("ulepszanie.tylko-wlasciciel", true);
 
         Map<String, String> rarities = new LinkedHashMap<>();
-        ConfigurationSection raritySection = reader.getSection("rzadkosci");
-        if (raritySection != null) {
-            for (String key : raritySection.getKeys(false)) {
-                String id = key.toUpperCase(Locale.ROOT);
-                rarities.put(id, reader.getString("rzadkosci." + key + ".nazwa", id));
-            }
+        for (String key : reader.keys("rzadkosci")) {
+            String id = key.toUpperCase(Locale.ROOT);
+            rarities.put(id, reader.getString("rzadkosci." + key + ".nazwa", id));
         }
         if (!rarities.containsKey(DEFAULT_RARITY)) {
             reader.warn("Brak rzadkości '" + DEFAULT_RARITY + "' w sekcji 'rzadkosci'. Dodaję domyślną.");
@@ -59,7 +56,7 @@ public record PluginSettings(
         }
 
         return new PluginSettings(dbFile, autosave, tickPeriod, requireIsland, memberAccess, updateBlocks,
-                defLimit, maxLimit, bypassIgnoresMax, returnStorage, HologramSettings.read(reader),
+                defLimit, maxLimit, bypassIgnoresMax, returnStorage, upgradeOwnerOnly, HologramSettings.read(reader),
                 Map.copyOf(rarities), GuiSettings.read(reader));
     }
 
