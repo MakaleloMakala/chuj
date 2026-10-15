@@ -13,7 +13,6 @@ import pl.skyblock.miniony.config.ConfigReader;
 import pl.skyblock.miniony.model.Minion;
 import pl.skyblock.miniony.model.MinionStatus;
 import pl.skyblock.miniony.util.BlockPos;
-import pl.skyblock.miniony.util.Drops;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -96,8 +95,7 @@ public final class FarmerType extends MinionType {
         ThreadLocalRandom random = ThreadLocalRandom.current();
         if (!mature.isEmpty()) {
             Block target = mature.get(random.nextInt(mature.size()));
-            Collection<ItemStack> drops = Drops.multiply(target.getDrops(new ItemStack(level(minion).appearance().tool())),
-                    level(minion).dropMultiplier());
+            Collection<ItemStack> drops = context.processDrops(minion, target.getDrops(new ItemStack(level(minion).appearance().tool())));
             if (!minion.storage().canFit(drops)) {
                 return MinionStatus.STORAGE_FULL;
             }

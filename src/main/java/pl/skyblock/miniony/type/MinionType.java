@@ -1,13 +1,21 @@
 package pl.skyblock.miniony.type;
 
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.World;
+import org.bukkit.inventory.ItemStack;
 import pl.skyblock.miniony.config.Appearance;
 import pl.skyblock.miniony.config.ConfigReader;
 import pl.skyblock.miniony.config.LevelSettings;
+import pl.skyblock.miniony.config.OfflineDrops;
 import pl.skyblock.miniony.config.TypeSettings;
 import pl.skyblock.miniony.model.Minion;
 import pl.skyblock.miniony.model.MinionStatus;
+import pl.skyblock.miniony.util.Drops;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Typ miniona. Dodanie nowego typu = jedna klasa dziedzicząca po MinionType
@@ -77,6 +85,31 @@ public abstract class MinionType {
     public boolean usesDropMultiplier() {
         return true;
     }
+
+    /** Czy typ może produkować w trybie offline (domyślnie wg sekcji "offline" w configu). */
+    public boolean supportsOffline() {
+        return settings.offline().enabled();
+    }
+
+    /**
+     * Surowy drop z {@code cycles} cykli pracy offline (przed mnożnikami i modułami).
+     * Domyślnie: co "cykle-na-drop" cykli jedna jednostka dropu z configu.
+     */
+    public List<ItemStack> simulateOffline(Minion minion, long cycles) {
+        OfflineDrops offline = settings.offline();
+        List<ItemStack> result = new ArrayList<>();
+        if (!offline.enabled() || offline.drops().isEmpty() || cycles <= 0) {
+            return result;
+        }
+        long units = cycles / offline.cyclesPerDrop();
+        for (Map.Entry<Material, Integer> entry : offline.drops().entrySet()) {
+            Drops.addSplit(result, new ItemStack(entry.getKey()), (int) Math.min(units * entry.getValue(), MAX_OFFLINE_ITEMS));
+        }
+        return result;
+    }
+
+    /** Limit sztuk jednego przedmiotu z jednej symulacji offline (ochrona pamięci). */
+    protected static final long MAX_OFFLINE_ITEMS = 200_000L;
 
     /** Środek miniona (do wyszukiwania encji). */
     protected static Location center(Minion minion, World world) {

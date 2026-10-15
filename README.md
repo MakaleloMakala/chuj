@@ -22,4 +22,6 @@ Zależności (wszystkie `provided`, opcjonalne na serwerze jako `softdepend`):
 Etap 1 (rdzeń): Górnik, stawianie/zbieranie, magazyn + GUI, hologram, SQLite, limity, integracja SSB2/LuckPerms.
 Etap 2: poziomy 1-N (szybkość, pojemność, zasięg, mnożnik dropu, wygląd), koszt ulepszeń (Vault + przedmioty + Nexo),
 typy Drwal, Farmer, Rybak, Zabójca, Zbieracz.
+Etap 3: rzadkości (mnożniki, max poziom, sloty modułów, bonusowy drop, limity), ulepszanie rzadkości,
+moduły (auto-przetapianie, auto-sprzedaż, kompaktor, paliwo, rozszerzenie zasięgu, łącze ze skrzynią), praca offline.
 Pełna instrukcja konfiguracji pojawi się po Etapie 4.

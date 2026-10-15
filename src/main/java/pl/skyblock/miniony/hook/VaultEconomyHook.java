@@ -79,6 +79,21 @@ public final class VaultEconomyHook implements EconomyHook {
     }
 
     @Override
+    public boolean depositOffline(java.util.UUID player, double amount) {
+        Economy economy = economy();
+        if (economy == null) {
+            return false;
+        }
+        try {
+            EconomyResponse response = economy.depositPlayer(Bukkit.getOfflinePlayer(player), amount);
+            return response != null && response.transactionSuccess();
+        } catch (RuntimeException e) {
+            logger.log(Level.WARNING, "Błąd ekonomii (depositOffline)", e);
+            return false;
+        }
+    }
+
+    @Override
     public String format(double amount) {
         Economy economy = economy();
         try {

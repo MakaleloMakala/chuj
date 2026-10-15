@@ -25,18 +25,19 @@ import java.util.logging.Logger;
  */
 public final class Database {
 
-    private static final int SCHEMA_VERSION = 1;
+    private static final int SCHEMA_VERSION = 2;
 
     private static final String UPSERT = """
             INSERT INTO minions (id, owner, owner_name, island, type, rarity, level, state, token, world, x, y, z, yaw,
-                                 storage, modules, pending_delivery, created_at, last_work)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                 storage, modules, pending_delivery, created_at, last_work, link, fuel_type, fuel_ms, last_active)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 owner = excluded.owner, owner_name = excluded.owner_name, island = excluded.island,
                 type = excluded.type, rarity = excluded.rarity, level = excluded.level, state = excluded.state,
                 token = excluded.token, world = excluded.world, x = excluded.x, y = excluded.y, z = excluded.z,
                 yaw = excluded.yaw, storage = excluded.storage, modules = excluded.modules,
-                pending_delivery = excluded.pending_delivery, last_work = excluded.last_work
+                pending_delivery = excluded.pending_delivery, last_work = excluded.last_work, link = excluded.link,
+                fuel_type = excluded.fuel_type, fuel_ms = excluded.fuel_ms, last_active = excluded.last_active
             """;
 
     private final Logger logger;
@@ -82,10 +83,68 @@ public final class Database {
                         )""");
                 st.execute("CREATE INDEX IF NOT EXISTS idx_minions_owner ON minions(owner)");
                 st.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)");
-                st.execute("INSERT OR IGNORE INTO meta (key, value) VALUES ('schema', '" + SCHEMA_VERSION + "')");
             }
+            migrate();
             return null;
         });
+    }
+
+    /** Migracja schematu: dodaje brakujące kolumny (bez utraty danych). */
+    private void migrate() throws SQLException {
+        java.util.Set<String> columns = new java.util.HashSet<>();
+        try (Statement st = connection.createStatement();
+             ResultSet rs = st.executeQuery("PRAGMA table_info(minions)")) {
+            while (rs.next()) {
+                columns.add(rs.getString("name").toLowerCase(java.util.Locale.ROOT));
+            }
+        }
+        String[][] added = {
+                {"link", "TEXT"},
+                {"fuel_type", "TEXT"},
+                {"fuel_ms", "INTEGER NOT NULL DEFAULT 0"},
+                {"last_active", "INTEGER NOT NULL DEFAULT 0"}
+        };
+        try (Statement st = connection.createStatement()) {
+            for (String[] column : added) {
+                if (!columns.contains(column[0])) {
+                    st.execute("ALTER TABLE minions ADD COLUMN " + column[0] + " " + column[1]);
+                    logger.info("Baza: dodano kolumnę '" + column[0] + "'.");
+                }
+            }
+            st.execute("INSERT OR REPLACE INTO meta (key, value) VALUES ('schema', '" + SCHEMA_VERSION + "')");
+        }
+    }
+
+    /** Odczyt wartości z tabeli meta (blokuje - tylko przy starcie). */
+    public String getMeta(String key) throws Exception {
+        return runSync(() -> {
+            try (PreparedStatement ps = connection.prepareStatement("SELECT value FROM meta WHERE key = ?")) {
+                ps.setString(1, key);
+                try (ResultSet rs = ps.executeQuery()) {
+                    return rs.next() ? rs.getString(1) : null;
+                }
+            }
+        });
+    }
+
+    /** Asynchroniczny zapis wartości w tabeli meta. */
+    public void setMetaAsync(String key, String value) {
+        if (executor.isShutdown()) {
+            return;
+        }
+        try {
+            executor.execute(() -> {
+                try (PreparedStatement ps = connection.prepareStatement("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)")) {
+                    ps.setString(1, key);
+                    ps.setString(2, value);
+                    ps.executeUpdate();
+                } catch (SQLException e) {
+                    logger.log(Level.WARNING, "Błąd zapisu meta '" + key + "'", e);
+                }
+            });
+        } catch (java.util.concurrent.RejectedExecutionException ignored) {
+            // baza zamknięta
+        }
     }
 
     /** Wczytuje wszystkie miniony. Blokuje (wywoływane przy starcie pluginu). */
@@ -116,7 +175,11 @@ public final class Database {
                                 rs.getString("modules"),
                                 rs.getInt("pending_delivery") != 0,
                                 rs.getLong("created_at"),
-                                rs.getLong("last_work")));
+                                rs.getLong("last_work"),
+                                rs.getString("link"),
+                                rs.getString("fuel_type"),
+                                rs.getLong("fuel_ms"),
+                                rs.getLong("last_active")));
                     } catch (RuntimeException e) {
                         logger.warning("Pominięto uszkodzony rekord miniona '" + id + "': " + e.getMessage());
                     }
@@ -207,7 +270,11 @@ public final class Database {
                 ps.setString(i++, s.modules());
                 ps.setInt(i++, s.pendingDelivery() ? 1 : 0);
                 ps.setLong(i++, s.createdAt());
-                ps.setLong(i, s.lastWorkAt());
+                ps.setLong(i++, s.lastWorkAt());
+                ps.setString(i++, s.linkedChest());
+                ps.setString(i++, s.fuelType());
+                ps.setLong(i++, s.fuelMs());
+                ps.setLong(i, s.lastActiveAt());
                 ps.addBatch();
             }
             ps.executeBatch();

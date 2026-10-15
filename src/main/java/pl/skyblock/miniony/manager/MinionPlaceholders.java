@@ -4,7 +4,7 @@ import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import pl.skyblock.miniony.MinionyPlugin;
 import pl.skyblock.miniony.config.HologramSettings;
-import pl.skyblock.miniony.config.LevelSettings;
+import pl.skyblock.miniony.model.EffectiveStats;
 import pl.skyblock.miniony.message.Text;
 import pl.skyblock.miniony.model.Minion;
 import pl.skyblock.miniony.model.MinionStatus;
@@ -33,8 +33,7 @@ public final class MinionPlaceholders {
     }
 
     public static TagResolver of(MinionyPlugin plugin, Minion minion) {
-        MinionType type = plugin.types().get(minion.typeId());
-        LevelSettings level = type != null ? type.level(minion) : null;
+        EffectiveStats stats = plugin.minions().stats(minion);
         return TagResolver.resolver(
                 Placeholder.component("typ", Text.parse(typeName(plugin, minion.typeId()))),
                 Placeholder.unparsed("poziom", String.valueOf(minion.level())),
@@ -42,11 +41,15 @@ public final class MinionPlaceholders {
                 Placeholder.unparsed("wlasciciel", minion.ownerName()),
                 Placeholder.unparsed("zapelnienie", String.valueOf(minion.storage().usedSlots())),
                 Placeholder.unparsed("pojemnosc", String.valueOf(minion.storage().capacity())),
+                Placeholder.unparsed("moduly", String.valueOf(minion.modules().size())),
+                Placeholder.unparsed("sloty-modulow", String.valueOf(stats.moduleSlots())),
+                Placeholder.unparsed("paliwo", minion.fuelMs() > 0 ? ModuleService.formatDuration(minion.fuelMs()) : "-"),
                 Placeholder.component("status", Text.parse(statusRaw(plugin, minion.status()))),
-                Placeholder.unparsed("interwal", level == null ? "?" : String.valueOf(level.intervalSeconds())),
-                Placeholder.unparsed("zasieg", level == null ? "?" : String.valueOf(level.range())),
-                Placeholder.unparsed("mnoznik", level == null ? "?" : formatMultiplier(level.dropMultiplier())),
-                Placeholder.unparsed("max-poziom", type == null ? "?" : String.valueOf(type.settings().maxLevel()))
+                Placeholder.unparsed("interwal", formatMultiplier(stats.intervalMs() / 1000.0)),
+                Placeholder.unparsed("zasieg", String.valueOf(stats.range())),
+                Placeholder.unparsed("mnoznik", formatMultiplier(stats.dropMultiplier())),
+                Placeholder.unparsed("bonus", formatMultiplier(stats.bonusDropChance() * 100.0)),
+                Placeholder.unparsed("max-poziom", String.valueOf(stats.maxLevel()))
         );
     }
 

@@ -64,6 +64,12 @@ public final class SlayerType extends MinionType {
         killsPerCycle = reader.getInt(base + "zabicia-na-cykl", 1, 1, 10);
     }
 
+    /** Moby nie pojawiają się w wyładowanych chunkach - brak produkcji offline. */
+    @Override
+    public boolean supportsOffline() {
+        return false;
+    }
+
     @Override
     public boolean usesBlockArea() {
         return false;
@@ -74,7 +80,7 @@ public final class SlayerType extends MinionType {
         if (minion.storage().freeSlots() == 0) {
             return MinionStatus.STORAGE_FULL;
         }
-        int range = level(minion).range();
+        int range = context.stats(minion).range();
         Location center = center(minion, world);
         BoundingBox box = new BoundingBox(
                 center.getX() - range - 0.5, center.getY() - verticalRange, center.getZ() - range - 0.5,
@@ -102,12 +108,11 @@ public final class SlayerType extends MinionType {
         }
         found.sort((a, b) -> Double.compare(a.getLocation().distanceSquared(center), b.getLocation().distanceSquared(center)));
         int killed = 0;
-        double multiplier = level(minion).dropMultiplier();
         for (LivingEntity target : found) {
             if (killed >= killsPerCycle || minion.storage().freeSlots() == 0) {
                 break;
             }
-            if (context.kill(minion, target, multiplier, dropExp)) {
+            if (context.kill(minion, target, dropExp)) {
                 killed++;
             }
         }

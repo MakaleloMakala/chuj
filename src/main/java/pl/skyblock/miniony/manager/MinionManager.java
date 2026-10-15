@@ -17,11 +17,15 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.scheduler.BukkitTask;
 import pl.skyblock.miniony.MinionyPlugin;
+import pl.skyblock.miniony.config.LevelSettings;
 import pl.skyblock.miniony.config.PluginSettings;
+import pl.skyblock.miniony.config.RaritySettings;
+import pl.skyblock.miniony.config.TypeSettings;
 import pl.skyblock.miniony.data.MinionSnapshot;
 import pl.skyblock.miniony.hook.IslandHook;
 import pl.skyblock.miniony.limit.LimitService;
 import pl.skyblock.miniony.message.Messages;
+import pl.skyblock.miniony.model.EffectiveStats;
 import pl.skyblock.miniony.model.Minion;
 import pl.skyblock.miniony.model.MinionState;
 import pl.skyblock.miniony.model.MinionStatus;
@@ -30,7 +34,6 @@ import pl.skyblock.miniony.type.MinionType;
 import pl.skyblock.miniony.type.WorkContext;
 import pl.skyblock.miniony.util.BlockPos;
 import pl.skyblock.miniony.util.ChunkKeys;
-import pl.skyblock.miniony.util.Drops;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -83,14 +86,28 @@ public final class MinionManager {
         }
 
         @Override
-        public boolean kill(Minion minion, LivingEntity entity, double dropMultiplier, boolean dropExp) {
-            return killForMinion(minion, entity, dropMultiplier, dropExp);
+        public boolean kill(Minion minion, LivingEntity entity, boolean dropExp) {
+            return killForMinion(minion, entity, dropExp);
+        }
+
+        @Override
+        public EffectiveStats stats(Minion minion) {
+            return MinionManager.this.stats(minion);
+        }
+
+        @Override
+        public List<ItemStack> processDrops(Minion minion, Collection<ItemStack> drops) {
+            return plugin.modules().processDrops(minion, drops);
         }
     };
 
     /** Zabójstwo w toku - EntityDeathEvent jest wywoływany synchronicznie wewnątrz setHealth(0). */
-    private record PendingKill(Minion minion, UUID entity, double multiplier, boolean dropExp) {
+    private record PendingKill(Minion minion, UUID entity, boolean dropExp) {
     }
+
+    /** Miniony do zapisania na koniec bieżącego taktu (sprzedaż, przeniesienie do skrzyni). */
+    private final Set<Minion> urgentSave = new LinkedHashSet<>();
+    private long lastTickAt;
 
     private PendingKill pendingKill;
 
@@ -106,13 +123,34 @@ public final class MinionManager {
     // Cykl życia
     // =====================================================================================
 
-    /** Wczytuje miniony z bazy (główny wątek, przy starcie). */
-    public void load(Collection<MinionSnapshot> snapshots) {
+    /**
+     * Wczytuje miniony z bazy (główny wątek, przy starcie).
+     *
+     * @param heartbeat ostatni zapisany "znak życia" serwera (0 = brak) - do rozliczenia pracy offline po restarcie/crashu
+     */
+    public void load(Collection<MinionSnapshot> snapshots, long heartbeat) {
         int placed = 0;
+        long now = System.currentTimeMillis();
+        boolean countDowntime = plugin.settings().offline().countServerDowntime();
         for (MinionSnapshot s : snapshots) {
             Minion minion = fromSnapshot(s);
             minions.put(minion.id(), minion);
             if (minion.state() == MinionState.PLACED) {
+                // Rozliczenie czasu offline po restarcie:
+                // - minion aktywny w chwili wyłączenia/crashu (lastActiveAt == 0) liczy od ostatniego heartbeat
+                //   (albo od teraz, gdy czas wyłączenia serwera się nie liczy),
+                // - minion nieaktywny przesuwa znacznik o czas wyłączenia serwera (gdy się nie liczy).
+                if (minion.lastActiveAt() == Minion.NO_OFFLINE) {
+                    // minion nie pracował w chwili dezaktywacji - bez kredytu offline
+                } else if (heartbeat <= 0 || heartbeat > now) {
+                    if (minion.lastActiveAt() <= 0 || minion.lastActiveAt() > now) {
+                        minion.setLastActiveAt(now);
+                    }
+                } else if (minion.lastActiveAt() <= 0) {
+                    minion.setLastActiveAt(countDowntime ? heartbeat : now);
+                } else if (!countDowntime) {
+                    minion.setLastActiveAt(Math.min(now, minion.lastActiveAt() + (now - heartbeat)));
+                }
                 if (minion.world() == null) {
                     plugin.getLogger().warning("Minion " + minion.id() + " jest oznaczony jako postawiony, ale nie ma lokalizacji - zwracam go właścicielowi.");
                     minion.setState(MinionState.ITEM);
@@ -139,7 +177,6 @@ public final class MinionManager {
 
     private Minion fromSnapshot(MinionSnapshot s) {
         MinionType type = plugin.types().get(s.type());
-        int capacity = type != null ? type.settings().level(Math.max(1, s.level())).capacity() : 9;
         ItemStack[] items = null;
         if (s.storage() != null && s.storage().length > 0) {
             try {
@@ -149,7 +186,7 @@ public final class MinionManager {
                         + " - magazyn będzie pusty.", e);
             }
         }
-        MinionStorage storage = MinionStorage.of(items, capacity);
+        MinionStorage storage = MinionStorage.of(items, 1);
         int level = Math.max(1, s.level());
         if (type != null && level > type.settings().maxLevel()) {
             plugin.getLogger().warning("Minion " + s.id() + " ma poziom " + level + ", a typ '" + type.id() + "' ma tylko "
@@ -182,6 +219,10 @@ public final class MinionManager {
         }
         m.setPendingDelivery(s.pendingDelivery());
         m.setLastWorkAt(s.lastWorkAt());
+        m.setLinkedChest(s.linkedChest());
+        m.setFuel(s.fuelType(), s.fuelMs());
+        m.setLastActiveAt(s.lastActiveAt());
+        storage.setCapacity(stats(m).capacity());
         return m;
     }
 
@@ -241,8 +282,9 @@ public final class MinionManager {
                 minion.setLevel(type.settings().maxLevel());
                 minion.setDirty(true);
             }
-            if (type != null && minion.storage().capacity() != type.level(minion).capacity()) {
-                minion.storage().setCapacity(type.level(minion).capacity());
+            int capacity = stats(minion).capacity();
+            if (minion.storage().capacity() != capacity) {
+                minion.storage().setCapacity(capacity);
                 minion.setDirty(true);
             }
         }
@@ -268,6 +310,42 @@ public final class MinionManager {
 
     public int placedCount(UUID owner) {
         return placedCount.getOrDefault(owner, 0);
+    }
+
+    /** Liczba postawionych minionów właściciela o danej rzadkości. */
+    public int placedCount(UUID owner, String rarity) {
+        int count = 0;
+        for (Minion m : minions.values()) {
+            if (m.state() == MinionState.PLACED && m.owner().equals(owner) && rarity.equalsIgnoreCase(m.rarity())) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /** Efektywne statystyki: poziom x rzadkość x moduły (x paliwo). */
+    public EffectiveStats stats(Minion minion) {
+        return statsFor(minion, minion.level(), minion.rarity());
+    }
+
+    /** Statystyki miniona przy podanym poziomie i rzadkości (podgląd ulepszenia). */
+    public EffectiveStats statsFor(Minion minion, int levelNumber, String rarityId) {
+        MinionType type = plugin.types().get(minion.typeId());
+        LevelSettings level = type != null ? type.settings().level(levelNumber) : null;
+        RaritySettings rarity = plugin.settings().rarity(rarityId);
+        ModuleService modules = plugin.modules();
+        double fuel = modules.fuelMultiplier(minion);
+        long baseInterval = Math.max(1000L, Math.round((level != null ? level.intervalSeconds() : 15) * 1000.0
+                / rarity.speedMultiplier()));
+        long interval = Math.max(1000L, Math.round(baseInterval / fuel));
+        int capacity = (int) Math.max(1, Math.min(TypeSettings.MAX_CAPACITY,
+                Math.round((level != null ? level.capacity() : 9) * rarity.capacityMultiplier())));
+        int range = (level != null ? level.range() : 2) + modules.rangeBonus(minion);
+        double drop = (level != null ? level.dropMultiplier() : 1.0) * rarity.dropMultiplier();
+        int typeMax = type != null ? type.settings().maxLevel() : 1;
+        int maxLevel = rarity.maxLevel() > 0 ? Math.min(typeMax, rarity.maxLevel()) : typeMax;
+        return new EffectiveStats(interval, baseInterval, fuel, capacity, range, drop, rarity.bonusDropChance(),
+                Math.max(1, maxLevel), rarity.moduleSlots());
     }
 
     public List<Minion> placedBy(UUID owner) {
@@ -359,18 +437,78 @@ public final class MinionManager {
         if (minion.area() == null) {
             minion.setArea(computeArea(minion, world));
         }
+        long now = System.currentTimeMillis();
+        if (minion.lastActiveAt() > 0) {
+            simulateOffline(minion, world, now - minion.lastActiveAt(), now);
+        }
+        if (minion.lastActiveAt() != 0) {
+            minion.setLastActiveAt(0);
+            minion.setDirty(true);
+        }
         plugin.visuals().spawn(minion, world);
         active.add(minion);
-        MinionType type = plugin.types().get(minion.typeId());
-        long interval = type != null ? type.level(minion).intervalSeconds() * 1000L : 5000L;
+        long interval = stats(minion).intervalMs();
         // rozłożenie pracy w czasie, żeby miniony z jednego chunka nie pracowały w tym samym ticku
-        minion.setNextWorkAt(System.currentTimeMillis() + ThreadLocalRandom.current().nextLong(Math.max(1, interval)));
+        minion.setNextWorkAt(now + ThreadLocalRandom.current().nextLong(Math.max(1, interval)));
     }
 
     private void deactivate(Minion minion) {
         plugin.visuals().despawn(minion);
-        active.remove(minion);
+        if (active.remove(minion) && minion.state() == MinionState.PLACED) {
+            // Od tej chwili liczy się czas pracy offline - chyba że minion nie miał miejsca/celu pracy
+            // (wtedy online też by nic nie wyprodukował, więc nie dostaje produkcji offline).
+            boolean blocked = minion.status() == MinionStatus.NO_SPACE || minion.status() == MinionStatus.NO_TARGET;
+            minion.setLastActiveAt(blocked ? Minion.NO_OFFLINE : System.currentTimeMillis());
+            minion.setDirty(true);
+        }
         minion.setStatus(MinionStatus.IDLE);
+    }
+
+    /**
+     * Symulowana produkcja za czas, gdy chunk miniona był wyładowany (limit godzin z configu).
+     * Uwzględnia rzadkość, poziom, paliwo i moduły. Nadmiar, który się nie zmieścił, przy aktywnej
+     * auto-sprzedaży jest sprzedawany, w przeciwnym razie przepada (jak przy pełnym magazynie).
+     */
+    private void simulateOffline(Minion minion, World world, long elapsed, long now) {
+        if (!plugin.settings().offline().enabled() || elapsed <= 0) {
+            return;
+        }
+        MinionType type = plugin.types().get(minion.typeId());
+        if (type == null || !type.isEnabled() || !type.supportsOffline()) {
+            return;
+        }
+        elapsed = Math.min(elapsed, plugin.settings().offline().maxHours() * 3_600_000L);
+        EffectiveStats stats = stats(minion);
+        long boosted = stats.fuelMultiplier() > 1.0 ? Math.min(elapsed, minion.fuelMs()) : 0;
+        double cycles = boosted / (stats.baseIntervalMs() / stats.fuelMultiplier())
+                + (double) (elapsed - boosted) / stats.baseIntervalMs();
+        if (boosted > 0) {
+            minion.setFuel(minion.fuelType(), minion.fuelMs() - boosted);
+        }
+        long wholeCycles = (long) cycles;
+        if (wholeCycles <= 0) {
+            return;
+        }
+        List<ItemStack> produced;
+        try {
+            produced = plugin.modules().processBulkDrops(minion, type.simulateOffline(minion, wholeCycles));
+        } catch (RuntimeException e) {
+            plugin.getLogger().log(Level.SEVERE, "Błąd symulacji offline miniona " + minion.id(), e);
+            return;
+        }
+        List<ItemStack> overflow = new ArrayList<>();
+        for (ItemStack stack : produced) {
+            int left = minion.storage().addPartial(stack);
+            if (left > 0) {
+                ItemStack rest = stack.clone();
+                rest.setAmount(left);
+                overflow.add(rest);
+            }
+        }
+        plugin.modules().sellOverflow(minion, overflow);
+        plugin.modules().afterWork(minion, world, now);
+        minion.setLastWorkAt(now);
+        minion.setDirty(true);
     }
 
     private List<BlockPos> computeArea(Minion minion, World world) {
@@ -378,7 +516,7 @@ public final class MinionManager {
         if (type == null || !type.usesBlockArea()) {
             return List.of();
         }
-        int range = type.level(minion).range();
+        int range = stats(minion).range();
         int y = minion.blockY() + type.areaYOffset();
         if (y < world.getMinHeight() || y >= world.getMaxHeight()) {
             return List.of();
@@ -491,6 +629,8 @@ public final class MinionManager {
             return;
         }
         long now = System.currentTimeMillis();
+        long delta = lastTickAt > 0 ? Math.min(now - lastTickAt, 60_000L) : 0;
+        lastTickAt = now;
         for (Minion minion : new ArrayList<>(active)) {
             World world = Bukkit.getWorld(minion.world());
             if (world == null || !world.isChunkLoaded(minion.chunkX(), minion.chunkZ())) {
@@ -502,6 +642,7 @@ public final class MinionManager {
             } else {
                 keepInPlace(minion, world);
             }
+            plugin.modules().consumeFuel(minion, delta);
             if (now < minion.nextWorkAt()) {
                 continue;
             }
@@ -512,7 +653,7 @@ public final class MinionManager {
                 plugin.visuals().updateHologram(minion);
                 continue;
             }
-            minion.setNextWorkAt(now + type.level(minion).intervalSeconds() * 1000L);
+            minion.setNextWorkAt(now + stats(minion).intervalMs());
             int before = minion.storage().totalItems();
             MinionStatus status;
             try {
@@ -527,11 +668,29 @@ public final class MinionManager {
             if (status == MinionStatus.WORKING) {
                 minion.setLastWorkAt(now);
             }
+            try {
+                if (plugin.modules().afterWork(minion, world, now)) {
+                    urgentSave.add(minion);
+                }
+            } catch (RuntimeException e) {
+                if (reportedWorkErrors.add("modules")) {
+                    plugin.getLogger().log(Level.SEVERE, "Błąd modułów miniona " + minion.id(), e);
+                }
+            }
             if (minion.storage().totalItems() != before) {
                 minion.setDirty(true);
                 plugin.gui().refresh(minion.id());
             }
             plugin.visuals().updateHologram(minion);
+        }
+        if (!urgentSave.isEmpty()) {
+            List<MinionSnapshot> batch = new ArrayList<>(urgentSave.size());
+            for (Minion minion : urgentSave) {
+                minion.setDirty(false);
+                batch.add(snapshot(minion));
+            }
+            urgentSave.clear();
+            plugin.database().saveAsync(batch, this::onSaveFailure);
         }
     }
 
@@ -549,11 +708,11 @@ public final class MinionManager {
         }
     }
 
-    private boolean killForMinion(Minion minion, LivingEntity entity, double multiplier, boolean dropExp) {
+    private boolean killForMinion(Minion minion, LivingEntity entity, boolean dropExp) {
         if (pendingKill != null || entity.isDead()) {
             return false;
         }
-        pendingKill = new PendingKill(minion, entity.getUniqueId(), multiplier, dropExp);
+        pendingKill = new PendingKill(minion, entity.getUniqueId(), dropExp);
         try {
             entity.setHealth(0);
         } catch (RuntimeException e) {
@@ -575,7 +734,7 @@ public final class MinionManager {
             return;
         }
         List<ItemStack> leftovers = new ArrayList<>();
-        for (ItemStack stack : Drops.multiply(event.getDrops(), kill.multiplier())) {
+        for (ItemStack stack : plugin.modules().processDrops(kill.minion(), event.getDrops())) {
             int left = kill.minion().storage().addPartial(stack);
             if (left > 0) {
                 ItemStack rest = stack.clone();
@@ -596,7 +755,7 @@ public final class MinionManager {
         if (type == null) {
             return;
         }
-        minion.storage().setCapacity(type.level(minion).capacity());
+        minion.storage().setCapacity(stats(minion).capacity());
         minion.setArea(null);
         if (active.contains(minion)) {
             World world = Bukkit.getWorld(minion.world());
@@ -607,16 +766,22 @@ public final class MinionManager {
         }
     }
 
+    /** Po zmianie rzadkości: jak po zmianie poziomu (pojemność, mnożniki, hologram). */
+    public void rarityChanged(Minion minion, String previousRarity) {
+        applyLevelChange(minion);
+    }
+
     // =====================================================================================
     // Tworzenie / stawianie / zbieranie
     // =====================================================================================
 
     /** Tworzy nowego miniona w stanie przedmiotu i od razu zapisuje go w bazie. */
-    public Minion createItemMinion(MinionType type, Player owner, int level) {
+    public Minion createItemMinion(MinionType type, Player owner, int level, String rarity) {
         int lvl = Math.max(1, Math.min(level, type.settings().maxLevel()));
         Minion minion = new Minion(UUID.randomUUID(), owner.getUniqueId(), owner.getName(), type.id(),
-                PluginSettings.DEFAULT_RARITY, lvl, new MinionStorage(type.settings().level(lvl).capacity()),
+                rarity == null ? PluginSettings.DEFAULT_RARITY : rarity, lvl, new MinionStorage(1),
                 System.currentTimeMillis());
+        minion.storage().setCapacity(stats(minion).capacity());
         minion.setState(MinionState.ITEM);
         minions.put(minion.id(), minion);
         saveNow(minion);
@@ -685,6 +850,15 @@ public final class MinionManager {
                     Placeholder.component("limit", limitComponent(limit)));
             return;
         }
+        int rarityLimit = plugin.limits().rarityLimit(player, minion.rarity());
+        int rarityCount = placedCount(player.getUniqueId(), minion.rarity());
+        if (rarityCount >= rarityLimit) {
+            msg.send(player, "limit-rzadkosci",
+                    Placeholder.component("rzadkosc", pl.skyblock.miniony.message.Text.parse(plugin.settings().rarityName(minion.rarity()))),
+                    Placeholder.unparsed("liczba", String.valueOf(rarityCount)),
+                    Placeholder.component("limit", limitComponent(rarityLimit)));
+            return;
+        }
         // Pobranie przedmiotu - weryfikujemy, że w ręce nadal jest ten sam minion z tym samym tokenem.
         PlayerInventory inventory = player.getInventory();
         ItemStack inHand = inventory.getItem(hand);
@@ -707,6 +881,8 @@ public final class MinionManager {
         minion.rotateToken();
         minion.setStatus(MinionStatus.IDLE);
         minion.setLastWorkAt(System.currentTimeMillis());
+        minion.setLastActiveAt(0); // świeżo postawiony minion nie dostaje produkcji offline
+        minion.setLinkedChest(null); // skrzynia była w starym miejscu
         index(minion);
         saveNow(minion);
         activate(minion, world);
@@ -761,6 +937,8 @@ public final class MinionManager {
         minion.clearLocation();
         minion.setIslandId(null);
         minion.setPendingDelivery(false);
+        minion.setLastActiveAt(0);
+        minion.setLinkedChest(null);
         minion.rotateToken();
         // Najpierw przedmiot miniona (gwarantowany wolny slot), potem zawartość magazynu.
         inventory.setItem(slot, plugin.items().create(minion));
@@ -835,6 +1013,8 @@ public final class MinionManager {
             minion.clearLocation();
             minion.setIslandId(null);
             minion.setPendingDelivery(true);
+            minion.setLastActiveAt(0);
+            minion.setLinkedChest(null);
             minion.rotateToken();
             saveNow(minion);
             owners.add(minion.owner());
@@ -918,7 +1098,8 @@ public final class MinionManager {
         byte[] storage = ItemStack.serializeItemsAsBytes(m.storage().snapshot());
         return new MinionSnapshot(m.id(), m.owner(), m.ownerName(), m.islandId(), m.typeId(), m.rarity(), m.level(),
                 m.state().name(), m.token(), m.world(), m.x(), m.y(), m.z(), m.yaw(), storage,
-                String.join(",", m.modules()), m.pendingDelivery(), m.createdAt(), m.lastWorkAt());
+                String.join(",", m.modules()), m.pendingDelivery(), m.createdAt(), m.lastWorkAt(),
+                m.linkedChest(), m.fuelType(), m.fuelMs(), m.lastActiveAt());
     }
 
     /** Natychmiastowy (asynchroniczny) zapis jednego miniona. */
@@ -962,6 +1143,8 @@ public final class MinionManager {
             }
         }
         plugin.database().saveAsync(snapshots, this::onSaveFailure);
+        // "znak życia" serwera - do rozliczenia pracy offline po crashu
+        plugin.database().setMetaAsync("heartbeat", String.valueOf(System.currentTimeMillis()));
     }
 
     private void onSaveFailure(Collection<MinionSnapshot> failed) {

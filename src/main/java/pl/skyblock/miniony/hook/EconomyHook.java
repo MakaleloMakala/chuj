@@ -19,6 +19,9 @@ public interface EconomyHook {
 
     String format(double amount);
 
+    /** Wpłata dla gracza, który może być offline (np. auto-sprzedaż). */
+    boolean depositOffline(java.util.UUID player, double amount);
+
     /** Brak ekonomii. */
     EconomyHook NONE = new EconomyHook() {
         @Override
@@ -44,6 +47,11 @@ public interface EconomyHook {
         @Override
         public String format(double amount) {
             return String.format(Locale.ROOT, "%.2f", amount);
+        }
+
+        @Override
+        public boolean depositOffline(java.util.UUID player, double amount) {
+            return false;
         }
     };
 }

@@ -34,5 +34,6 @@ public final class PlayerListener implements Listener {
     public void onQuit(PlayerQuitEvent event) {
         plugin.limits().invalidate(event.getPlayer().getUniqueId());
         plugin.upgrades().forget(event.getPlayer().getUniqueId());
+        plugin.modules().cancelLink(event.getPlayer().getUniqueId());
     }
 }

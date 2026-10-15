@@ -196,6 +196,39 @@ public final class MinionStorage {
         return left;
     }
 
+    /** Liczba sztuk przedmiotów podobnych (isSimilar) do wzorca. */
+    public int countSimilar(ItemStack template) {
+        int count = 0;
+        for (ItemStack item : slots) {
+            if (item != null && item.isSimilar(template)) {
+                count += item.getAmount();
+            }
+        }
+        return count;
+    }
+
+    /** Usuwa do {@code amount} sztuk przedmiotów podobnych do wzorca (od końca). Zwraca liczbę usuniętych. */
+    public int removeSimilar(ItemStack template, int amount) {
+        int removed = 0;
+        for (int i = slots.length - 1; i >= 0 && removed < amount; i--) {
+            ItemStack item = slots[i];
+            if (item == null || !item.isSimilar(template)) {
+                continue;
+            }
+            int take = Math.min(amount - removed, item.getAmount());
+            removed += take;
+            if (take >= item.getAmount()) {
+                slots[i] = null;
+            } else {
+                item.setAmount(item.getAmount() - take);
+            }
+        }
+        if (slots.length > capacity) {
+            setCapacity(capacity);
+        }
+        return removed;
+    }
+
     /** Kopia zawartości do zapisu. */
     public ItemStack[] snapshot() {
         ItemStack[] copy = new ItemStack[slots.length];

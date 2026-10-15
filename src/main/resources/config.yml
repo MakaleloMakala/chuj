@@ -5,7 +5,7 @@
 # ==========================================================
 
 # Wersja pliku konfiguracyjnego - nie zmieniaj ręcznie.
-wersja-configu: 2
+wersja-configu: 3
 
 baza-danych:
   # Nazwa pliku bazy SQLite w folderze pluginu.
@@ -49,9 +49,10 @@ hologram:
   wlaczony: true
   # Wysokość hologramu nad podstawą miniona (w blokach).
   wysokosc: 1.35
-  # Dostępne zmienne: <typ>, <poziom>, <max-poziom>, <rzadkosc>, <wlasciciel>, <zapelnienie>, <pojemnosc>, <status>
+  # Dostępne zmienne: <typ>, <poziom>, <max-poziom>, <rzadkosc>, <wlasciciel>, <zapelnienie>, <pojemnosc>, <status>,
+  # <interwal>, <zasieg>, <mnoznik>, <bonus>, <moduly>, <sloty-modulow>
   linie:
-    - '<gold><typ> <gray>[<white>Poz. <poziom></white>]'
+    - '<rzadkosc> <gold><typ> <gray>[<white>Poz. <poziom></white>]'
     - '<gray>Właściciel: <white><wlasciciel>'
     - '<gray>Magazyn: <white><zapelnienie>/<pojemnosc></white>'
     - '<status>'
@@ -62,10 +63,206 @@ hologram:
     oczekuje: '<gray>Oczekuje'
     brak-celu: '<yellow>Brak celu pracy'
 
-# Nazwy rzadkości (w Etapie 3 rozbudowane o mnożniki).
+# Rzadkości minionów - kolejność w pliku = kolejność ulepszania (pierwsza to najniższa).
+# ZWYKLY musi istnieć (domyślna rzadkość). Można dodawać własne rzadkości.
+#   mnoznik-szybkosci        - dzieli interwał pracy (1.5 = 1,5x szybciej)
+#   mnoznik-dropu            - mnoży drop (razem z mnożnikiem poziomu)
+#   mnoznik-pojemnosci       - mnoży pojemność magazynu z poziomu (maks. 270 slotów)
+#   max-poziom               - najwyższy poziom dostępny dla tej rzadkości (0 = bez ograniczenia)
+#   sloty-modulow            - ile modułów można zainstalować (0-9)
+#   szansa-bonusowego-dropu  - szansa (0.0-1.0) na podwójny drop w cyklu pracy
+#   limit                    - ile minionów tej rzadkości może postawić jeden gracz (-1 = bez limitu);
+#                              permisja miniony.limit.<rzadkość>.<liczba> nadpisuje tę wartość (bierzemy największą)
+#   koszt-ulepszenia         - koszt ulepszenia NA tę rzadkość z poprzedniej (format jak koszt poziomu)
 rzadkosci:
   ZWYKLY:
     nazwa: '<gray>Zwykły'
+    mnoznik-szybkosci: 1.0
+    mnoznik-dropu: 1.0
+    mnoznik-pojemnosci: 1.0
+    max-poziom: 0
+    sloty-modulow: 1
+    szansa-bonusowego-dropu: 0.0
+    limit: -1
+  RZADKI:
+    nazwa: '<blue>Rzadki'
+    mnoznik-szybkosci: 1.1
+    mnoznik-dropu: 1.1
+    mnoznik-pojemnosci: 1.25
+    max-poziom: 0
+    sloty-modulow: 2
+    szansa-bonusowego-dropu: 0.02
+    limit: -1
+    koszt-ulepszenia:
+      pieniadze: 50000
+      przedmioty:
+        - 'DIAMOND:32'
+  EPICKI:
+    nazwa: '<dark_purple>Epicki'
+    mnoznik-szybkosci: 1.25
+    mnoznik-dropu: 1.25
+    mnoznik-pojemnosci: 1.5
+    max-poziom: 0
+    sloty-modulow: 3
+    szansa-bonusowego-dropu: 0.05
+    limit: 10
+    koszt-ulepszenia:
+      pieniadze: 150000
+      przedmioty:
+        - 'EMERALD:64'
+  LEGENDARNY:
+    nazwa: '<gold>Legendarny'
+    mnoznik-szybkosci: 1.5
+    mnoznik-dropu: 1.5
+    mnoznik-pojemnosci: 2.0
+    max-poziom: 0
+    sloty-modulow: 4
+    szansa-bonusowego-dropu: 0.1
+    limit: 3
+    koszt-ulepszenia:
+      pieniadze: 500000
+      przedmioty:
+        - 'NETHER_STAR:1'
+
+ulepszanie-rzadkosci:
+  # Czy gracze mogą ulepszać rzadkość w GUI (przycisk w slocie gui.przyciski.rzadkosc).
+  wlaczone: false
+  # Czy do ulepszenia rzadkości minion musi mieć maksymalny poziom (dla obecnej rzadkości).
+  wymaga-max-poziomu: true
+
+# Praca offline: gdy chunk miniona był wyładowany, przy ponownym załadowaniu (np. wejście na wyspę)
+# minion dostaje produkcję za ten czas (wg sekcji "offline" typu, z mnożnikami, rzadkością i modułami).
+# To, co nie zmieści się w magazynie, przepada (albo jest sprzedawane, jeśli działa moduł auto-sprzedaży).
+praca-offline:
+  wlaczona: true
+  # Maksymalny naliczany czas w godzinach (0 = brak produkcji offline).
+  maks-godzin: 12
+  # Czy liczyć też czas, gdy serwer był wyłączony.
+  licz-czas-wylaczenia-serwera: false
+
+# Moduły instalowane w GUI miniona (przycisk "Moduły"). Liczba slotów zależy od rzadkości.
+# Wspólne opcje: wlaczony, nazwa, ikona, opis (lore), koszt (jak koszt poziomu), dozwolone-typy (puste = wszystkie).
+# Odinstalowanie modułu (shift + klik) nie zwraca kosztu.
+moduly:
+  auto-przetapianie:
+    wlaczony: true
+    nazwa: '<gold>Auto-przetapianie'
+    ikona: FURNACE
+    opis:
+      - '<gray>Przetapia drop jak piec'
+      - '<gray>(np. surowe żelazo -> sztabka).'
+    koszt:
+      pieniadze: 25000
+      przedmioty:
+        - 'FURNACE:8'
+    dozwolone-typy: []
+    # Materiały, których moduł nie przetapia.
+    pomijaj:
+      - COBBLESTONE
+      - OAK_LOG
+  auto-sprzedaz:
+    wlaczony: true
+    nazwa: '<green>Auto-sprzedaż'
+    ikona: GOLD_INGOT
+    opis:
+      - '<gray>Sprzedaje drop z cennika (Vault),'
+      - '<gray>pieniądze trafiają do właściciela.'
+    koszt:
+      pieniadze: 50000
+      przedmioty: []
+    dozwolone-typy: []
+    # Co ile sekund następuje sprzedaż (oraz zawsze, gdy magazyn jest pełny).
+    co-ile-sekund: 60
+    # Czy wysyłać właścicielowi (online) wiadomość o sprzedaży.
+    powiadomienia: false
+    # Ceny za sztukę. Sprzedawane są tylko "czyste" przedmioty z tej listy.
+    ceny:
+      COBBLESTONE: 0.5
+      OAK_LOG: 1.0
+      WHEAT: 1.0
+      COD: 2.0
+      SALMON: 3.0
+      ROTTEN_FLESH: 0.5
+      BONE: 1.0
+      IRON_INGOT: 10.0
+  kompaktor:
+    wlaczony: true
+    nazwa: '<aqua>Kompaktor'
+    ikona: PISTON
+    opis:
+      - '<gray>Zamienia przedmioty w magazynie'
+      - '<gray>na bloki (np. 9 sztabek -> blok).'
+    koszt:
+      pieniadze: 30000
+      przedmioty:
+        - 'PISTON:16'
+    dozwolone-typy: []
+    # Format: WEJŚCIE:ilość:WYJŚCIE
+    przepisy:
+      - 'IRON_INGOT:9:IRON_BLOCK'
+      - 'GOLD_INGOT:9:GOLD_BLOCK'
+      - 'DIAMOND:9:DIAMOND_BLOCK'
+      - 'EMERALD:9:EMERALD_BLOCK'
+      - 'REDSTONE:9:REDSTONE_BLOCK'
+      - 'LAPIS_LAZULI:9:LAPIS_BLOCK'
+      - 'COAL:9:COAL_BLOCK'
+      - 'WHEAT:9:HAY_BLOCK'
+      - 'SLIME_BALL:9:SLIME_BLOCK'
+      - 'BONE_MEAL:9:BONE_BLOCK'
+  paliwo:
+    wlaczony: true
+    nazwa: '<red>Komora paliwa'
+    ikona: BLAST_FURNACE
+    opis:
+      - '<gray>Pozwala dolewać paliwo,'
+      - '<gray>które przyspiesza pracę miniona.'
+    koszt:
+      pieniadze: 20000
+      przedmioty: []
+    dozwolone-typy: []
+    # Maksymalny zapas paliwa w godzinach.
+    maks-godzin: 24
+    # Paliwa: czas działania jednej sztuki i mnożnik szybkości. Nie można mieszać rodzajów paliwa.
+    paliwa:
+      COAL:
+        czas-sekundy: 1800
+        mnoznik-szybkosci: 1.1
+      COAL_BLOCK:
+        czas-sekundy: 16200
+        mnoznik-szybkosci: 1.1
+      BLAZE_ROD:
+        czas-sekundy: 3600
+        mnoznik-szybkosci: 1.25
+      LAVA_BUCKET:
+        czas-sekundy: 7200
+        mnoznik-szybkosci: 1.25
+  rozszerzenie-zasiegu:
+    wlaczony: true
+    nazwa: '<yellow>Rozszerzenie zasięgu'
+    ikona: SPYGLASS
+    opis:
+      - '<gray>Zwiększa zasięg pracy miniona.'
+    koszt:
+      pieniadze: 40000
+      przedmioty:
+        - 'ENDER_PEARL:16'
+    dozwolone-typy: []
+    # O ile bloków zwiększa zasięg.
+    bonus: 1
+  lacze-skrzyni:
+    wlaczony: true
+    nazwa: '<gold>Łącze ze skrzynią'
+    ikona: CHEST
+    opis:
+      - '<gray>Przenosi zawartość magazynu'
+      - '<gray>do wskazanej skrzyni.'
+    koszt:
+      pieniadze: 15000
+      przedmioty:
+        - 'HOPPER:4'
+    dozwolone-typy: []
+    # Maksymalna odległość skrzyni od miniona (w blokach). Skrzynia musi być na tej samej wyspie.
+    maks-odleglosc: 8
 
 # Typy minionów. Klucz sekcji to identyfikator typu używany w komendach (/minion give <gracz> <typ>).
 # Każdy typ ma poziomy 1..N (sekcja "poziomy"). Wartości, których nie podasz w danym poziomie,
@@ -84,13 +281,20 @@ typy:
     item:
       material: PLAYER_HEAD
       # Dostępne zmienne: <typ>, <poziom>, <max-poziom>, <rzadkosc>, <zapelnienie>, <pojemnosc>, <interwal>, <zasieg>, <mnoznik>
-      nazwa: '<gold>Minion: <typ> <gray>[Poz. <poziom>]'
+      nazwa: '<rzadkosc> <gold>Minion: <typ> <gray>[Poz. <poziom>]'
       lore:
         - '<gray>Rzadkość: <rzadkosc>'
         - '<gray>Poziom: <white><poziom>/<max-poziom>'
         - '<gray>Magazyn: <white><zapelnienie>/<pojemnosc>'
         - ''
         - '<yellow>Kliknij prawym na blok wyspy, aby postawić.'
+    # Praca offline (gdy chunk był wyładowany): co "cykle-na-drop" cykli pracy powstaje jedna jednostka dropu.
+    # Ustaw tak, by odpowiadało pracy online (np. górnik: postawienie + wykopanie = 2 cykle).
+    offline:
+      wlaczona: true
+      cykle-na-drop: 2
+      drop:
+        - 'COBBLESTONE:1'
     poziomy:
       1:
         interwal-sekundy: 15
@@ -158,13 +362,20 @@ typy:
     item:
       material: PLAYER_HEAD
       # Dostępne zmienne: <typ>, <poziom>, <max-poziom>, <rzadkosc>, <zapelnienie>, <pojemnosc>, <interwal>, <zasieg>, <mnoznik>
-      nazwa: '<gold>Minion: <typ> <gray>[Poz. <poziom>]'
+      nazwa: '<rzadkosc> <gold>Minion: <typ> <gray>[Poz. <poziom>]'
       lore:
         - '<gray>Rzadkość: <rzadkosc>'
         - '<gray>Poziom: <white><poziom>/<max-poziom>'
         - '<gray>Magazyn: <white><zapelnienie>/<pojemnosc>'
         - ''
         - '<yellow>Kliknij prawym na blok wyspy, aby postawić.'
+    # Praca offline (gdy chunk był wyładowany): co "cykle-na-drop" cykli pracy powstaje jedna jednostka dropu.
+    # Ustaw tak, by odpowiadało pracy online (np. górnik: postawienie + wykopanie = 2 cykle).
+    offline:
+      wlaczona: true
+      cykle-na-drop: 2
+      drop:
+        - 'OAK_LOG:1'
     poziomy:
       1:
         interwal-sekundy: 15
@@ -237,13 +448,21 @@ typy:
     item:
       material: PLAYER_HEAD
       # Dostępne zmienne: <typ>, <poziom>, <max-poziom>, <rzadkosc>, <zapelnienie>, <pojemnosc>, <interwal>, <zasieg>, <mnoznik>
-      nazwa: '<gold>Minion: <typ> <gray>[Poz. <poziom>]'
+      nazwa: '<rzadkosc> <gold>Minion: <typ> <gray>[Poz. <poziom>]'
       lore:
         - '<gray>Rzadkość: <rzadkosc>'
         - '<gray>Poziom: <white><poziom>/<max-poziom>'
         - '<gray>Magazyn: <white><zapelnienie>/<pojemnosc>'
         - ''
         - '<yellow>Kliknij prawym na blok wyspy, aby postawić.'
+    # Praca offline (gdy chunk był wyładowany): co "cykle-na-drop" cykli pracy powstaje jedna jednostka dropu.
+    # Ustaw tak, by odpowiadało pracy online (np. górnik: postawienie + wykopanie = 2 cykle).
+    offline:
+      wlaczona: true
+      cykle-na-drop: 9
+      drop:
+        - 'WHEAT:1'
+        - 'WHEAT_SEEDS:1'
     poziomy:
       1:
         interwal-sekundy: 15
@@ -319,13 +538,18 @@ typy:
     item:
       material: PLAYER_HEAD
       # Dostępne zmienne: <typ>, <poziom>, <max-poziom>, <rzadkosc>, <zapelnienie>, <pojemnosc>, <interwal>, <zasieg>, <mnoznik>
-      nazwa: '<gold>Minion: <typ> <gray>[Poz. <poziom>]'
+      nazwa: '<rzadkosc> <gold>Minion: <typ> <gray>[Poz. <poziom>]'
       lore:
         - '<gray>Rzadkość: <rzadkosc>'
         - '<gray>Poziom: <white><poziom>/<max-poziom>'
         - '<gray>Magazyn: <white><zapelnienie>/<pojemnosc>'
         - ''
         - '<yellow>Kliknij prawym na blok wyspy, aby postawić.'
+    # Praca offline: rybak losuje łup z tabeli "lup" (wartość oczekiwana), sekcja drop nie jest używana.
+    offline:
+      wlaczona: true
+      cykle-na-drop: 1
+      drop: []
     poziomy:
       1:
         interwal-sekundy: 20
@@ -410,13 +634,16 @@ typy:
     item:
       material: PLAYER_HEAD
       # Dostępne zmienne: <typ>, <poziom>, <max-poziom>, <rzadkosc>, <zapelnienie>, <pojemnosc>, <interwal>, <zasieg>, <mnoznik>
-      nazwa: '<gold>Minion: <typ> <gray>[Poz. <poziom>]'
+      nazwa: '<rzadkosc> <gold>Minion: <typ> <gray>[Poz. <poziom>]'
       lore:
         - '<gray>Rzadkość: <rzadkosc>'
         - '<gray>Poziom: <white><poziom>/<max-poziom>'
         - '<gray>Magazyn: <white><zapelnienie>/<pojemnosc>'
         - ''
         - '<yellow>Kliknij prawym na blok wyspy, aby postawić.'
+    # Brak produkcji offline - moby i przedmioty nie pojawiają się w wyładowanych chunkach.
+    offline:
+      wlaczona: false
     poziomy:
       1:
         interwal-sekundy: 20
@@ -485,13 +712,16 @@ typy:
     item:
       material: PLAYER_HEAD
       # Dostępne zmienne: <typ>, <poziom>, <max-poziom>, <rzadkosc>, <zapelnienie>, <pojemnosc>, <interwal>, <zasieg>, <mnoznik>
-      nazwa: '<gold>Minion: <typ> <gray>[Poz. <poziom>]'
+      nazwa: '<rzadkosc> <gold>Minion: <typ> <gray>[Poz. <poziom>]'
       lore:
         - '<gray>Rzadkość: <rzadkosc>'
         - '<gray>Poziom: <white><poziom>/<max-poziom>'
         - '<gray>Magazyn: <white><zapelnienie>/<pojemnosc>'
         - ''
         - '<yellow>Kliknij prawym na blok wyspy, aby postawić.'
+    # Brak produkcji offline - moby i przedmioty nie pojawiają się w wyładowanych chunkach.
+    offline:
+      wlaczona: false
     poziomy:
       1:
         interwal-sekundy: 10
@@ -553,7 +783,7 @@ typy:
 
 gui:
   # Dostępne zmienne: <typ>, <poziom>, <strona>, <strony>
-  tytul: '<dark_gray>Minion: <typ> <gray>(<strona>/<strony>)'
+  tytul: '<dark_gray>Minion: <typ> <gray>(<strona>/<strony>) <rzadkosc>'
   wypelnienie:
     material: GRAY_STAINED_GLASS_PANE
     nazwa: ' '
@@ -580,7 +810,7 @@ gui:
       material: BOOK
       nazwa: '<gold>Informacje'
       # Dostępne zmienne: <typ>, <poziom>, <max-poziom>, <rzadkosc>, <wlasciciel>, <zapelnienie>, <pojemnosc>,
-      # <status>, <interwal>, <zasieg>, <mnoznik>
+      # <status>, <interwal>, <zasieg>, <mnoznik>, <bonus>, <moduly>, <sloty-modulow>, <paliwo>
       lore:
         - '<gray>Typ: <white><typ>'
         - '<gray>Poziom: <white><poziom>/<max-poziom>'
@@ -590,6 +820,9 @@ gui:
         - '<gray>Cykl pracy: <white>co <interwal> s'
         - '<gray>Zasięg: <white><zasieg>'
         - '<gray>Mnożnik dropu: <white>x<mnoznik>'
+        - '<gray>Bonusowy drop: <white><bonus>%'
+        - '<gray>Moduły: <white><moduly>/<sloty-modulow>'
+        - '<gray>Paliwo: <white><paliwo>'
         - '<gray>Status: <status>'
     zbierz-miniona:
       slot: 50
@@ -602,7 +835,7 @@ gui:
       slot: 46
       material: EXPERIENCE_BOTTLE
       # Dostępne zmienne: jak w "informacje" oraz <nastepny-poziom>, <nowy-interwal>, <nowa-pojemnosc>,
-      # <nowy-zasieg>, <nowy-mnoznik>. Linia zawierająca tylko '<koszt>' zostanie zastąpiona listą kosztów.
+      # <nowy-zasieg>, <nowy-mnoznik>, <nowy-max-poziom>. Linia zawierająca tylko '<koszt>' zostanie zastąpiona listą kosztów.
       nazwa: '<green>Ulepsz do poziomu <nastepny-poziom>'
       lore:
         - '<gray>Cykl pracy: <white><interwal> s</white> → <green><nowy-interwal> s'
@@ -622,6 +855,35 @@ gui:
       nazwa: '<gold>Maksymalny poziom'
       lore:
         - '<gray>Ten minion osiągnął maksymalny poziom.'
+    moduly:
+      slot: 47
+      material: COMPARATOR
+      nazwa: '<aqua>Moduły'
+      lore:
+        - '<gray>Zainstalowane: <white><moduly>/<sloty-modulow>'
+        - ''
+        - '<yellow>Kliknij, aby otworzyć.'
+    # Widoczny tylko, gdy ulepszanie-rzadkosci.wlaczone: true.
+    # Zmienne: jak w "ulepsz" oraz <nastepna-rzadkosc>, <nowe-sloty-modulow>.
+    rzadkosc:
+      slot: 51
+      material: AMETHYST_SHARD
+      nazwa: '<light_purple>Ulepsz rzadkość: <nastepna-rzadkosc>'
+      lore:
+        - '<gray>Cykl pracy: <white><interwal> s</white> → <green><nowy-interwal> s'
+        - '<gray>Pojemność: <white><pojemnosc></white> → <green><nowa-pojemnosc>'
+        - '<gray>Mnożnik dropu: <white>x<mnoznik></white> → <green>x<nowy-mnoznik>'
+        - '<gray>Sloty modułów: <white><sloty-modulow></white> → <green><nowe-sloty-modulow>'
+        - ''
+        - '<gray>Koszt:'
+        - '<koszt>'
+        - ''
+        - '<yellow>Kliknij, aby ulepszyć.'
+    rzadkosc-max:
+      material: DRAGON_BREATH
+      nazwa: '<light_purple>Najwyższa rzadkość'
+      lore:
+        - '<gray>Ten minion ma najwyższą rzadkość.'
     zamknij:
       slot: 52
       material: OAK_DOOR
@@ -633,6 +895,67 @@ gui:
       nazwa: '<yellow>Następna strona'
       lore: []
 
+# GUI modułów (4 rzędy): rząd 1 - sloty modułów miniona, rząd 3 - moduły do zainstalowania, rząd 4 - przyciski (27-35).
+gui-moduly:
+  tytul: '<dark_gray>Moduły: <typ> <rzadkosc>'
+  wolny-slot:
+    material: LIGHT_GRAY_STAINED_GLASS_PANE
+    nazwa: '<gray>Wolny slot'
+    lore:
+      - '<gray>Kliknij moduł poniżej, aby go zainstalować.'
+  zablokowany-slot:
+    material: BLACK_STAINED_GLASS_PANE
+    nazwa: '<dark_gray>Zablokowany slot'
+    lore:
+      - '<gray>Więcej slotów daje wyższa rzadkość.'
+  lore-zainstalowany:
+    - ''
+    - '<green>Aktywny'
+    - '<red>Shift + klik: odinstaluj (bez zwrotu kosztu)'
+  lore-nieaktywny:
+    - ''
+    - '<red>Nieaktywny (wyłączony, niedozwolony lub poza slotami)'
+  lore-do-kupienia:
+    - ''
+    - '<gray>Koszt:'
+    - '<koszt>'
+    - ''
+    - '<yellow>Kliknij, aby zainstalować.'
+  lore-juz-zainstalowany:
+    - ''
+    - '<green>Zainstalowany'
+  lore-niedozwolony:
+    - ''
+    - '<red>Niedostępny dla tego typu miniona'
+  przyciski:
+    powrot:
+      slot: 27
+      material: ARROW
+      nazwa: '<yellow>Powrót'
+      lore: []
+    paliwo:
+      slot: 30
+      material: COAL
+      nazwa: '<gold>Dolej paliwa'
+      lore:
+        - '<gray>Pozostało: <white><paliwo>'
+        - ''
+        - '<yellow>Klik: dolej 1 sztukę'
+        - '<yellow>Shift + klik: dolej cały stos'
+    lacze-skrzyni:
+      slot: 32
+      material: CHEST
+      nazwa: '<gold>Ustaw skrzynię'
+      lore:
+        - '<gray>Połączona skrzynia: <white><skrzynia>'
+        - ''
+        - '<yellow>Kliknij, a potem kliknij prawym skrzynię.'
+    zamknij:
+      slot: 35
+      material: OAK_DOOR
+      nazwa: '<gray>Zamknij'
+      lore: []
+
 wiadomosci:
   brak-uprawnien: '<red> ❌ Nie masz uprawnień do tej komendy.'
   tylko-gracz: '<red> ❌ Ta komenda jest dostępna tylko dla graczy.'
@@ -641,7 +964,8 @@ wiadomosci:
   nieznany-typ: '<red> ❌ Nieznany typ miniona: <typ>. Dostępne: <typy>.'
   nieprawidlowa-liczba: '<red> ❌ Nieprawidłowa liczba: <wartosc>.'
   nieznana-komenda: '<red> ❌ Nieznana komenda. Wpisz /minion pomoc.'
-  uzycie-give: '<red> ❌ Użycie: /minion give <gracz> <typ> [ilość] [poziom]'
+  uzycie-give: '<red> ❌ Użycie: /minion give <gracz> <typ> [ilość] [poziom] [rzadkość]'
+  nieznana-rzadkosc: '<red> ❌ Nieznana rzadkość: <rzadkosc>. Dostępne: <rzadkosci>.'
   nieprawidlowy-poziom: '<red> ❌ Nieprawidłowy poziom: <wartosc>. Dozwolone: 1-<max>.'
   przeladowano: '<green> ✔ Przeładowano konfigurację.'
   przeladowanie-blad: '<red> ❌ Nie udało się przeładować konfiguracji, szczegóły w konsoli.'
@@ -667,6 +991,30 @@ wiadomosci:
   ekwipunek-pelny-zwrot: '<red> ❌ Masz pełny ekwipunek. Zwolnij miejsce i wpisz /minion odbierz, aby odebrać <ilosc> minion(ów).'
   ulepszono: '<green> ✔ Ulepszono miniona <typ> do poziomu <poziom>.'
   maks-poziom: '<red> ❌ Ten minion ma już maksymalny poziom.'
+  maks-poziom-rzadkosci: '<red> ❌ To maksymalny poziom dla tej rzadkości. Ulepsz rzadkość, aby odblokować kolejne poziomy.'
+  limit-rzadkosci: '<red> ❌ Osiągnięto limit minionów rzadkości <rzadkosc> (<liczba>/<limit>).'
+  rzadkosc-ulepszona: '<green> ✔ Ulepszono rzadkość miniona <typ> na <rzadkosc>.'
+  rzadkosc-max: '<red> ❌ Ten minion ma już najwyższą rzadkość.'
+  rzadkosc-wylaczona: '<red> ❌ Ulepszanie rzadkości jest wyłączone.'
+  rzadkosc-wymaga-max-poziomu: '<red> ❌ Aby ulepszyć rzadkość, minion musi mieć maksymalny poziom.'
+  modul-zainstalowany: '<green> ✔ Zainstalowano moduł <modul>.'
+  modul-odinstalowany: '<green> ✔ Odinstalowano moduł <modul>.'
+  modul-juz-zainstalowany: '<red> ❌ Ten moduł jest już zainstalowany.'
+  modul-wylaczony: '<red> ❌ Ten moduł jest wyłączony.'
+  modul-niedozwolony: '<red> ❌ Tego modułu nie można zainstalować w tym typie miniona.'
+  modul-nieaktywny: '<red> ❌ Ten moduł nie jest aktywny w tym minionie.'
+  brak-slotu-modulu: '<red> ❌ Brak wolnego slotu na moduł. Więcej slotów daje wyższa rzadkość.'
+  paliwo-dodane: '<green> ✔ Dolano <ilosc> szt. paliwa. Zapas: <czas>.'
+  brak-paliwa: '<red> ❌ Nie masz w ekwipunku żadnego paliwa.'
+  paliwo-inny-typ: '<red> ❌ Nie masz paliwa tego samego rodzaju co obecne. Poczekaj, aż się zużyje.'
+  paliwo-pelne: '<red> ❌ Zbiornik paliwa jest pełny.'
+  lacze-tryb: '<gray>Kliknij prawym przyciskiem skrzynię w promieniu <white><odleglosc></white> bloków od miniona (masz 30 sekund).'
+  lacze-ustawione: '<green> ✔ Połączono miniona ze skrzynią.'
+  lacze-anulowane: '<red> ❌ Czas na wskazanie skrzyni minął.'
+  lacze-nie-skrzynia: '<red> ❌ To nie jest skrzynia ani inny pojemnik.'
+  lacze-za-daleko: '<red> ❌ Skrzynia jest za daleko (maks. <odleglosc> bloków).'
+  lacze-inna-wyspa: '<red> ❌ Skrzynia musi być na tej samej wyspie co minion.'
+  sprzedano: '<green> ✔ Minion <typ> sprzedał przedmioty za <kwota>.'
   tylko-wlasciciel-ulepsza: '<red> ❌ Tylko właściciel może ulepszyć tego miniona.'
   brak-pieniedzy: '<red> ❌ Nie masz wystarczająco pieniędzy. Potrzebujesz: <kwota>.'
   brak-przedmiotow: '<red> ❌ Brakuje przedmiotów: <brakujace>.'
@@ -677,7 +1025,7 @@ wiadomosci:
   limit-info: '<gray>Miniony gracza <white><gracz></white>: <white><liczba></white>/<white><limit></white>'
   limit-bez-limitu: 'bez limitu'
   lista-naglowek: '<gold>Miniony gracza <white><gracz></white> <gray>(<liczba>):'
-  lista-pozycja: '<gray>- <white><typ></white> <gray>poz. <white><poziom></white> <gray>| <white><swiat></white> <gray><x>, <y>, <z>'
+  lista-pozycja: '<gray>- <rzadkosc> <white><typ></white> <gray>poz. <white><poziom></white> <gray>| <white><swiat></white> <gray><x>, <y>, <z>'
   lista-pusta: '<gray>Gracz <white><gracz></white> nie ma postawionych minionów.'
   lista-do-odebrania: '<gray>Do odebrania (/minion odbierz): <white><ilosc>'
   pomoc:
@@ -686,7 +1034,7 @@ wiadomosci:
     - '<yellow>/minion limit <gray>- Twój limit minionów'
     - '<yellow>/minion odbierz <gray>- odbierz miniony z usuniętej wyspy'
   pomoc-admin:
-    - '<yellow>/minion give <gracz> <typ> [ilość] [poziom] <gray>- daj miniona'
+    - '<yellow>/minion give <gracz> <typ> [ilość] [poziom] [rzadkość] <gray>- daj miniona'
     - '<yellow>/minion list <gracz> <gray>- lista minionów gracza'
     - '<yellow>/minion limit <gracz> <gray>- limit gracza'
     - '<yellow>/minion reload <gray>- przeładuj konfigurację'

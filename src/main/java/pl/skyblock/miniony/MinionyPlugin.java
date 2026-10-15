@@ -27,7 +27,9 @@ import pl.skyblock.miniony.listener.ChunkListener;
 import pl.skyblock.miniony.listener.EntityListener;
 import pl.skyblock.miniony.listener.PlaceListener;
 import pl.skyblock.miniony.listener.PlayerListener;
+import pl.skyblock.miniony.gui.ModuleGui;
 import pl.skyblock.miniony.manager.MinionItems;
+import pl.skyblock.miniony.manager.ModuleService;
 import pl.skyblock.miniony.manager.MinionManager;
 import pl.skyblock.miniony.manager.MinionVisuals;
 import pl.skyblock.miniony.manager.UpgradeService;
@@ -50,7 +52,7 @@ import java.util.logging.Level;
 
 public final class MinionyPlugin extends JavaPlugin {
 
-    private static final int CONFIG_VERSION = 2;
+    private static final int CONFIG_VERSION = 3;
 
     private PluginSettings settings;
     private Messages messages;
@@ -66,6 +68,8 @@ public final class MinionyPlugin extends JavaPlugin {
     private EconomyHook economy = EconomyHook.NONE;
     private NexoHook nexo = NexoHook.disabled();
     private UpgradeService upgrades;
+    private ModuleService modules;
+    private ModuleGui moduleGui;
 
     @Override
     public void onEnable() {
@@ -102,13 +106,23 @@ public final class MinionyPlugin extends JavaPlugin {
             return;
         }
 
-        minions = new MinionManager(this);
-        minions.load(snapshots);
+        long heartbeat = 0;
+        try {
+            String value = database.getMeta("heartbeat");
+            heartbeat = value == null ? 0 : Long.parseLong(value);
+        } catch (Exception e) {
+            getLogger().log(Level.WARNING, "Nie udało się odczytać heartbeat z bazy - praca offline po restarcie nie zostanie naliczona.", e);
+        }
+        modules = new ModuleService(this);
         upgrades = new UpgradeService(this);
+        minions = new MinionManager(this);
+        minions.load(snapshots, heartbeat);
         gui = new MinionGui(this);
+        moduleGui = new ModuleGui(this);
 
         PluginManager pm = getServer().getPluginManager();
         pm.registerEvents(gui, this);
+        pm.registerEvents(moduleGui, this);
         pm.registerEvents(new PlaceListener(this), this);
         pm.registerEvents(new EntityListener(this), this);
         pm.registerEvents(new ChunkListener(this), this);
@@ -179,6 +193,9 @@ public final class MinionyPlugin extends JavaPlugin {
         if (gui != null) {
             gui.closeAll();
         }
+        if (moduleGui != null) {
+            moduleGui.closeAll();
+        }
         if (minions != null) {
             minions.shutdown();
         }
@@ -247,9 +264,11 @@ public final class MinionyPlugin extends JavaPlugin {
     /** /minion reload */
     public boolean reloadPlugin() {
         gui.closeAll();
+        moduleGui.closeAll();
         if (!loadConfiguration(false)) {
             return false;
         }
+        modules.reload();
         limits.clear();
         for (Player player : Bukkit.getOnlinePlayers()) {
             limits.refresh(player);
@@ -308,5 +327,13 @@ public final class MinionyPlugin extends JavaPlugin {
 
     public UpgradeService upgrades() {
         return upgrades;
+    }
+
+    public ModuleService modules() {
+        return modules;
+    }
+
+    public ModuleGui moduleGui() {
+        return moduleGui;
     }
 }

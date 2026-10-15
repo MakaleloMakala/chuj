@@ -87,6 +87,25 @@ public final class FisherType extends MinionType {
         }
     }
 
+    /** Offline: wartość oczekiwana łupu z tabeli (zamiast losowania każdego cyklu). */
+    @Override
+    public List<ItemStack> simulateOffline(Minion minion, long cycles) {
+        List<ItemStack> result = new ArrayList<>();
+        if (!supportsOffline() || cycles <= 0) {
+            return result;
+        }
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+        for (Loot entry : loot) {
+            double expected = (double) cycles * entry.weight() / totalWeight * (entry.min() + entry.max()) / 2.0;
+            long whole = (long) Math.floor(expected);
+            if (random.nextDouble() < expected - whole) {
+                whole++;
+            }
+            Drops.addSplit(result, new ItemStack(entry.material()), (int) Math.min(whole, MAX_OFFLINE_ITEMS));
+        }
+        return result;
+    }
+
     @Override
     public MinionStatus work(Minion minion, World world, WorkContext context) {
         List<BlockPos> area = minion.area();
@@ -119,7 +138,7 @@ public final class FisherType extends MinionType {
             }
         }
         int amount = chosen.min() + (chosen.max() > chosen.min() ? random.nextInt(chosen.max() - chosen.min() + 1) : 0);
-        List<ItemStack> drops = Drops.multiply(List.of(new ItemStack(chosen.material(), amount)), level(minion).dropMultiplier());
+        List<ItemStack> drops = context.processDrops(minion, List.of(new ItemStack(chosen.material(), amount)));
         if (!minion.storage().canFit(drops)) {
             return MinionStatus.STORAGE_FULL;
         }

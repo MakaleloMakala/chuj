@@ -38,6 +38,12 @@ public final class CollectorType extends MinionType {
         stacksPerCycle = reader.getInt(base + "stosy-na-cykl", 4, 1, 64);
     }
 
+    /** Przedmioty nie leżą w wyładowanych chunkach - brak produkcji offline. */
+    @Override
+    public boolean supportsOffline() {
+        return false;
+    }
+
     @Override
     public boolean usesBlockArea() {
         return false;
@@ -50,7 +56,7 @@ public final class CollectorType extends MinionType {
 
     @Override
     public MinionStatus work(Minion minion, World world, WorkContext context) {
-        int range = level(minion).range();
+        int range = context.stats(minion).range();
         Location center = center(minion, world);
         BoundingBox box = new BoundingBox(
                 center.getX() - range - 0.5, center.getY() - verticalRange, center.getZ() - range - 0.5,

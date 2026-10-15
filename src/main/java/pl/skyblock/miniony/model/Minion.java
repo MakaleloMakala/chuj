@@ -15,6 +15,9 @@ import java.util.UUID;
  */
 public final class Minion {
 
+    /** Znacznik lastActiveAt: brak produkcji offline. */
+    public static final long NO_OFFLINE = -1L;
+
     private final UUID id;
     private UUID owner;
     private String ownerName;
@@ -32,10 +35,22 @@ public final class Minion {
     private MinionStorage storage;
     private final List<String> modules = new ArrayList<>();
     private boolean pendingDelivery;
+    /** Połączona skrzynia ("świat;x;y;z") albo null. */
+    private String linkedChest;
+    /** Rodzaj paliwa (materiał) albo null. */
+    private String fuelType;
+    /** Pozostały czas paliwa w milisekundach. */
+    private long fuelMs;
+    /**
+     * Chwila dezaktywacji (wyładowania chunka); 0 = minion aktywny albo nie postawiony;
+     * {@link #NO_OFFLINE} = minion nie pracował w chwili dezaktywacji (brak miejsca/celu) - bez produkcji offline.
+     */
+    private long lastActiveAt;
     private final long createdAt;
     private long lastWorkAt;
 
     // --- runtime ---
+    private long nextSellAt;
     private ArmorStand body;
     private TextDisplay hologram;
     private long nextWorkAt;
@@ -225,6 +240,57 @@ public final class Minion {
 
     public void setLastWorkAt(long lastWorkAt) {
         this.lastWorkAt = lastWorkAt;
+    }
+
+    public String linkedChest() {
+        return linkedChest;
+    }
+
+    public void setLinkedChest(String linkedChest) {
+        this.linkedChest = linkedChest;
+    }
+
+    public String fuelType() {
+        return fuelType;
+    }
+
+    public long fuelMs() {
+        return fuelMs;
+    }
+
+    public void setFuel(String fuelType, long fuelMs) {
+        if (fuelType == null || fuelMs <= 0) {
+            this.fuelType = null;
+            this.fuelMs = 0;
+        } else {
+            this.fuelType = fuelType;
+            this.fuelMs = fuelMs;
+        }
+    }
+
+    public long lastActiveAt() {
+        return lastActiveAt;
+    }
+
+    public void setLastActiveAt(long lastActiveAt) {
+        this.lastActiveAt = lastActiveAt;
+    }
+
+    public long nextSellAt() {
+        return nextSellAt;
+    }
+
+    public void setNextSellAt(long nextSellAt) {
+        this.nextSellAt = nextSellAt;
+    }
+
+    public boolean hasModule(String id) {
+        for (String module : modules) {
+            if (module.equalsIgnoreCase(id)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public ArmorStand body() {

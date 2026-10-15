@@ -32,6 +32,18 @@ public final class PlaceListener implements Listener {
         this.plugin = plugin;
     }
 
+    /** Tryb łączenia skrzyni (moduł "łącze ze skrzynią") - kliknięcie skrzyni nie otwiera jej, tylko ją łączy. */
+    @EventHandler(priority = EventPriority.LOW)
+    public void onLinkClick(PlayerInteractEvent event) {
+        if (event.getAction() != Action.RIGHT_CLICK_BLOCK || event.getHand() != EquipmentSlot.HAND
+                || event.getClickedBlock() == null || !plugin.modules().isLinking(event.getPlayer())) {
+            return;
+        }
+        if (plugin.modules().handleLinkClick(event.getPlayer(), event.getClickedBlock())) {
+            event.setCancelled(true);
+        }
+    }
+
     @EventHandler(priority = EventPriority.HIGH)
     public void onInteract(PlayerInteractEvent event) {
         ItemStack item = event.getItem();

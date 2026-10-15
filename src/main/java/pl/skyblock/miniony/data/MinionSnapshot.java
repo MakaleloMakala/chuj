@@ -25,6 +25,10 @@ public record MinionSnapshot(
         String modules,
         boolean pendingDelivery,
         long createdAt,
-        long lastWorkAt
+        long lastWorkAt,
+        String linkedChest,
+        String fuelType,
+        long fuelMs,
+        long lastActiveAt
 ) {
 }

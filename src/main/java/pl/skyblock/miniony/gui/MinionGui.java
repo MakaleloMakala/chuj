@@ -20,6 +20,9 @@ import pl.skyblock.miniony.MinionyPlugin;
 import pl.skyblock.miniony.config.ButtonSettings;
 import pl.skyblock.miniony.config.GuiSettings;
 import pl.skyblock.miniony.config.LevelSettings;
+import pl.skyblock.miniony.config.RaritySettings;
+import pl.skyblock.miniony.config.UpgradeCost;
+import pl.skyblock.miniony.model.EffectiveStats;
 import pl.skyblock.miniony.manager.MinionPlaceholders;
 import pl.skyblock.miniony.message.Text;
 import pl.skyblock.miniony.model.Minion;
@@ -108,6 +111,8 @@ public final class MinionGui implements Listener {
         }
         button(inv, gui.collectAll(), resolver);
         upgradeButton(inv, minion, resolver);
+        rarityButton(inv, minion, resolver);
+        button(inv, gui.modules(), resolver);
         button(inv, gui.info(), resolver);
         button(inv, gui.pickup(), resolver);
         button(inv, gui.close(), resolver);
@@ -116,28 +121,56 @@ public final class MinionGui implements Listener {
     private void upgradeButton(Inventory inv, Minion minion, TagResolver resolver) {
         GuiSettings gui = plugin.settings().gui();
         MinionType type = plugin.types().get(minion.typeId());
-        if (type == null || minion.level() >= type.settings().maxLevel()) {
+        if (type == null || minion.level() >= plugin.minions().stats(minion).maxLevel()) {
             button(inv, gui.upgradeMax(), resolver);
             return;
         }
         LevelSettings next = type.settings().level(minion.level() + 1);
         TagResolver full = TagResolver.resolver(resolver,
                 Placeholder.unparsed("nastepny-poziom", String.valueOf(next.level())),
-                Placeholder.unparsed("nowy-interwal", String.valueOf(next.intervalSeconds())),
-                Placeholder.unparsed("nowa-pojemnosc", String.valueOf(next.capacity())),
-                Placeholder.unparsed("nowy-zasieg", String.valueOf(next.range())),
-                Placeholder.unparsed("nowy-mnoznik", MinionPlaceholders.formatMultiplier(next.dropMultiplier())));
-        ButtonSettings b = gui.upgrade();
+                preview(plugin.minions().statsFor(minion, next.level(), minion.rarity())));
+        costButton(inv, gui.upgrade(), full, next.cost());
+    }
+
+    private void rarityButton(Inventory inv, Minion minion, TagResolver resolver) {
+        GuiSettings gui = plugin.settings().gui();
+        if (!plugin.settings().rarityUpgradeEnabled()) {
+            return; // przycisk ukryty - zostaje wypełnienie
+        }
+        RaritySettings next = plugin.settings().nextRarity(minion.rarity());
+        if (next == null) {
+            button(inv, gui.rarityMax(), resolver);
+            return;
+        }
+        TagResolver full = TagResolver.resolver(resolver,
+                Placeholder.component("nastepna-rzadkosc", Text.parse(next.name())),
+                preview(plugin.minions().statsFor(minion, minion.level(), next.id())),
+                Placeholder.unparsed("nowe-sloty-modulow", String.valueOf(next.moduleSlots())));
+        costButton(inv, gui.rarity(), full, next.upgradeCost());
+    }
+
+    /** Zmienne "po ulepszeniu": nowy-interwal, nowa-pojemnosc, nowy-zasieg, nowy-mnoznik, nowy-max-poziom. */
+    private static TagResolver preview(EffectiveStats after) {
+        return TagResolver.resolver(
+                Placeholder.unparsed("nowy-interwal", MinionPlaceholders.formatMultiplier(after.intervalMs() / 1000.0)),
+                Placeholder.unparsed("nowa-pojemnosc", String.valueOf(after.capacity())),
+                Placeholder.unparsed("nowy-zasieg", String.valueOf(after.range())),
+                Placeholder.unparsed("nowy-mnoznik", MinionPlaceholders.formatMultiplier(after.dropMultiplier())),
+                Placeholder.unparsed("nowy-max-poziom", String.valueOf(after.maxLevel())));
+    }
+
+    /** Przycisk z kosztem - linia '<koszt>' w lore jest zastępowana listą kosztów. */
+    private void costButton(Inventory inv, ButtonSettings b, TagResolver resolver, UpgradeCost cost) {
         ItemStack item = new ItemStack(b.material());
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.displayName(Text.item(b.name(), full));
+            meta.displayName(Text.item(b.name(), resolver));
             List<Component> lore = new ArrayList<>();
             for (String line : b.lore()) {
                 if (line.trim().equals("<koszt>")) {
-                    lore.addAll(plugin.upgrades().costLines(next.cost()));
+                    lore.addAll(plugin.upgrades().costLines(cost));
                 } else {
-                    lore.add(Text.item(line, full));
+                    lore.add(Text.item(line, resolver));
                 }
             }
             meta.lore(lore);
@@ -178,6 +211,7 @@ public final class MinionGui implements Listener {
 
     /** Odświeża wszystkie otwarte widoki danego miniona. */
     public void refresh(UUID minionId) {
+        plugin.moduleGui().refresh(minionId);
         Set<MinionGuiHolder> set = viewers.get(minionId);
         if (set == null || set.isEmpty()) {
             return;
@@ -194,6 +228,7 @@ public final class MinionGui implements Listener {
 
     /** Zamyka wszystkie widoki danego miniona. */
     public void closeAll(UUID minionId) {
+        plugin.moduleGui().closeAll(minionId);
         Set<MinionGuiHolder> set = viewers.remove(minionId);
         if (set == null) {
             return;
@@ -300,6 +335,10 @@ public final class MinionGui implements Listener {
             collectAll(player, minion);
         } else if (slot == gui.upgrade().slot()) {
             plugin.upgrades().upgrade(player, minion);
+        } else if (slot == gui.rarity().slot() && plugin.settings().rarityUpgradeEnabled()) {
+            plugin.upgrades().upgradeRarity(player, minion);
+        } else if (slot == gui.modules().slot()) {
+            plugin.moduleGui().open(player, minion);
         } else if (slot == gui.pickup().slot()) {
             player.closeInventory();
             plugin.minions().pickup(player, minion);

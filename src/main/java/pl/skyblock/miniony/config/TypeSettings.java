@@ -19,7 +19,8 @@ public record TypeSettings(
         Material itemMaterial,
         String itemName,
         List<String> itemLore,
-        List<LevelSettings> levels
+        List<LevelSettings> levels,
+        OfflineDrops offline
 ) {
 
     public static final int MAX_CAPACITY = 270;
@@ -38,7 +39,8 @@ public record TypeSettings(
     /** Ustawienia domyślne (typ wyłączony) - używane, gdy w configu brak sekcji typu. */
     public static TypeSettings defaults(String id, String name, Appearance appearance) {
         LevelSettings level = new LevelSettings(1, 15, 9, 2, 1.0, UpgradeCost.FREE, appearance);
-        return new TypeSettings(id, false, name, Material.PLAYER_HEAD, "<gold>Minion: <typ>", List.of(), List.of(level));
+        return new TypeSettings(id, false, name, Material.PLAYER_HEAD, "<gold>Minion: <typ>", List.of(), List.of(level),
+                OfflineDrops.DISABLED);
     }
 
     /** Czyta ustawienia typu. Domyślna nazwa i wygląd pochodzą z klasy typu. */
@@ -50,7 +52,7 @@ public record TypeSettings(
         String itemName = reader.getString(base + "item.nazwa", "<gold>Minion: <typ> <gray>[Poz. <poziom>]");
         List<String> lore = reader.getStringList(base + "item.lore", List.of("<gray>Rzadkość: <rzadkosc>"));
         return new TypeSettings(id, enabled, name, itemMaterial, itemName, lore,
-                readLevels(reader, base, defAppearance));
+                readLevels(reader, base, defAppearance), OfflineDrops.read(reader, base));
     }
 
     private static List<LevelSettings> readLevels(ConfigReader reader, String base, Appearance defAppearance) {

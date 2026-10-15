@@ -22,7 +22,10 @@ public record GuiSettings(
         ButtonSettings upgradeMax,
         String costMoneyLine,
         String costItemLine,
-        String costFreeLine
+        String costFreeLine,
+        ButtonSettings modules,
+        ButtonSettings rarity,
+        ButtonSettings rarityMax
 ) {
 
     public static final int SIZE = 54;
@@ -57,9 +60,16 @@ public record GuiSettings(
         String costItem = reader.getString(base + "ulepsz.koszt-przedmiot", "<gray> - <white><ilosc>x </white><nazwa>");
         String costFree = reader.getString(base + "ulepsz.koszt-darmowy", "<gray> - <green>Darmowe");
 
-        ButtonSettings[] buttons = {prev, collect, info, pickup, close, next, upgrade};
-        int[] defaults = {45, 48, 49, 50, 52, 53, 46};
-        String[] names = {"poprzednia-strona", "odbierz-wszystko", "informacje", "zbierz-miniona", "zamknij", "nastepna-strona", "ulepsz"};
+        ButtonSettings modules = ButtonSettings.read(reader, base + "moduly", 47, Material.COMPARATOR, "<aqua>Moduły");
+        ButtonSettings rarity = ButtonSettings.read(reader, base + "rzadkosc", 51, Material.AMETHYST_SHARD, "<light_purple>Ulepsz rzadkość");
+        Material rarityMaxMaterial = reader.getMaterial(base + "rzadkosc-max.material", Material.DRAGON_BREATH, true, false);
+        String rarityMaxName = reader.getString(base + "rzadkosc-max.nazwa", "<light_purple>Najwyższa rzadkość");
+        List<String> rarityMaxLore = reader.getStringList(base + "rzadkosc-max.lore", List.of());
+
+        ButtonSettings[] buttons = {prev, collect, info, pickup, close, next, upgrade, modules, rarity};
+        int[] defaults = {45, 48, 49, 50, 52, 53, 46, 47, 51};
+        String[] names = {"poprzednia-strona", "odbierz-wszystko", "informacje", "zbierz-miniona", "zamknij", "nastepna-strona",
+                "ulepsz", "moduly", "rzadkosc"};
         Set<Integer> used = new HashSet<>();
         for (int i = 0; i < buttons.length; i++) {
             ButtonSettings b = buttons[i];
@@ -75,6 +85,7 @@ public record GuiSettings(
         ButtonSettings upgradeMax = new ButtonSettings(buttons[6].slot(), maxMaterial, maxName, maxLore);
         return new GuiSettings(title, filler, fillerName, itemLore,
                 buttons[0], buttons[1], buttons[2], buttons[3], buttons[4], buttons[5],
-                buttons[6], upgradeMax, costMoney, costItem, costFree);
+                buttons[6], upgradeMax, costMoney, costItem, costFree, buttons[7], buttons[8],
+                new ButtonSettings(buttons[8].slot(), rarityMaxMaterial, rarityMaxName, rarityMaxLore));
     }
 }

@@ -87,6 +87,15 @@ public final class MinionCommand implements TabExecutor {
         }
         int amount = 1;
         int level = 1;
+        String rarity = pl.skyblock.miniony.config.PluginSettings.DEFAULT_RARITY;
+        if (args.length >= 6) {
+            rarity = args[5].toUpperCase(Locale.ROOT);
+            if (!plugin.settings().rarities().containsKey(rarity)) {
+                msg.send(sender, "nieznana-rzadkosc", Placeholder.unparsed("rzadkosc", args[5]),
+                        Placeholder.unparsed("rzadkosci", String.join(", ", plugin.settings().rarities().keySet())));
+                return;
+            }
+        }
         if (args.length >= 5) {
             int max = type.settings().maxLevel();
             try {
@@ -112,7 +121,7 @@ public final class MinionCommand implements TabExecutor {
             }
         }
         for (int i = 0; i < amount; i++) {
-            Minion minion = plugin.minions().createItemMinion(type, target, level);
+            Minion minion = plugin.minions().createItemMinion(type, target, level, rarity);
             ItemStack item = plugin.items().create(minion);
             Map<Integer, ItemStack> rest = target.getInventory().addItem(item);
             for (ItemStack r : rest.values()) {
@@ -283,6 +292,9 @@ public final class MinionCommand implements TabExecutor {
                 }
             }
             return filter(levels, args[4]);
+        }
+        if (args.length == 6 && "give".equals(sub) && sender.hasPermission(PERM_GIVE)) {
+            return filter(new ArrayList<>(plugin.settings().rarities().keySet()), args[5]);
         }
         return List.of();
     }
