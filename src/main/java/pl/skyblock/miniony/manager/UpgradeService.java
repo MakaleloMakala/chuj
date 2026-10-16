@@ -287,7 +287,8 @@ public final class UpgradeService {
             ItemStack stack = plugin.nexo().create(cost.nexoId());
             return stack != null ? stack.effectiveName() : Component.text(cost.nexoId());
         }
-        return new ItemStack(cost.material()).effectiveName();
+        // nazwa tłumaczona po stronie klienta - gracz widzi ją w swoim języku
+        return Component.translatable(cost.material().translationKey());
     }
 
     /** Linie kosztu do lore przycisków. */

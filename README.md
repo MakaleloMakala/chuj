@@ -33,6 +33,16 @@ Pluginy można włączać/wyłączać w trakcie działania (np. PlugMan) - Minio
 mvn clean package
 ```
 
+`mvn clean package` uruchamia też testy automatyczne (JUnit + [MockBukkit](https://github.com/MockBukkit/MockBukkit) -
+atrapa serwera Paper 26.2). Pominięcie testów: `mvn clean package -DskipTests`.
+
+Testy (`src/test/java`) sprawdzają m.in.: stawianie i zbieranie, ochronę tokenem przed kopiami przedmiotów, limity
+(także per rzadkość), GUI i próby duplikacji (shift-click, double click, klawisze 1-9, drop, przeciąganie,
+spam kliknięć, dwóch graczy naraz, zbieranie przy otwartym GUI), pracę typów, wyładowanie/załadowanie chunka,
+restart pluginu, pracę offline i jej limit, ulepszenia (koszt, brak ekonomii, przemianowane przedmioty, spam),
+rzadkości, moduły i usuwanie miniona po zniszczeniu przedmiotu. Hologramu (TextDisplay) MockBukkit nie obsługuje -
+wymaga sprawdzenia na serwerze.
+
 Repozytoria w `pom.xml`: PaperMC, BG-Software (SuperiorSkyblockAPI), JitPack (VaultAPI), Maven Central (LuckPerms API).
 Wersję Paper API zmienisz we właściwości `paper.version`.
 

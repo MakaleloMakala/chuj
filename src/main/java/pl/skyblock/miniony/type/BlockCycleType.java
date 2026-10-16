@@ -25,6 +25,7 @@ public abstract class BlockCycleType extends MinionType {
 
     private final Material defaultBlock;
     private Material block;
+    private boolean warnedNoDrops;
 
     protected BlockCycleType(String id, String defaultName, Appearance appearance, Material defaultBlock) {
         super(id, defaultName, appearance);
@@ -37,6 +38,7 @@ public abstract class BlockCycleType extends MinionType {
 
     @Override
     protected void loadExtra(ConfigReader reader, String base) {
+        warnedNoDrops = false;
         block = reader.getMaterial(base + "blok", defaultBlock, false, true);
         if (!block.isSolid() || block.hasGravity()) {
             reader.warn("Blok '" + block + "' w '" + base + "blok' musi być stały i nie może spadać. Używam: " + defaultBlock);
@@ -85,7 +87,18 @@ public abstract class BlockCycleType extends MinionType {
             return MinionStatus.NO_SPACE;
         }
         Block target = mineable.get(random.nextInt(mineable.size()));
-        Collection<ItemStack> drops = context.processDrops(minion, target.getDrops(new ItemStack(level(minion).appearance().tool())));
+        ItemStack tool = new ItemStack(level(minion).appearance().tool());
+        Collection<ItemStack> raw = target.getDrops(tool);
+        if (raw.isEmpty()) {
+            // narzędzie nie wydobywa tego bloku (np. obsydian drewnianym kilofem) - nie niszczymy go za darmo
+            if (!warnedNoDrops) {
+                warnedNoDrops = true;
+                java.util.logging.Logger.getLogger("Miniony").warning("[Konfiguracja] Typ '" + id() + "': blok " + block
+                        + " nie daje dropu narzędziem " + tool.getType() + " - minion go nie wykopuje. Zmień 'narzedzie' w poziomach.");
+            }
+            return MinionStatus.NO_SPACE;
+        }
+        Collection<ItemStack> drops = context.processDrops(minion, raw);
         if (!minion.storage().canFit(drops)) {
             return MinionStatus.STORAGE_FULL;
         }

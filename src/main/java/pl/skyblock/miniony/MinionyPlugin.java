@@ -55,7 +55,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.logging.Level;
 
-public final class MinionyPlugin extends JavaPlugin {
+public class MinionyPlugin extends JavaPlugin {
 
     private static final int CONFIG_VERSION = 4;
 

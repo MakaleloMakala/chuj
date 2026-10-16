@@ -93,10 +93,8 @@ public final class MinionVisuals {
             s.setInvulnerable(true);
             s.setGravity(false);
             s.setSilent(true);
-            s.setCanPickupItems(false);
             s.setCanMove(false);
             s.setCanTick(false);
-            s.setRemoveWhenFarAway(false);
             s.setDisabledSlots(EquipmentSlot.HAND, EquipmentSlot.OFF_HAND, EquipmentSlot.HEAD,
                     EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET);
             EntityEquipment eq = s.getEquipment();

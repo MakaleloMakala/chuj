@@ -83,7 +83,7 @@ public final class ModuleGui implements Listener {
         holder.inventory = inventory;
         render(minion, holder);
         player.openInventory(inventory);
-        if (player.getOpenInventory().getTopInventory().getHolder(false) == holder) {
+        if (Guis.openHolder(player) == holder) {
             viewers.computeIfAbsent(minion.id(), k -> new HashSet<>()).add(holder);
         }
     }
@@ -212,7 +212,7 @@ public final class ModuleGui implements Listener {
         }
         for (Holder holder : set) {
             Player player = Bukkit.getPlayer(holder.viewer);
-            if (player != null && player.getOpenInventory().getTopInventory().getHolder(false) == holder) {
+            if (player != null && Guis.openHolder(player) == holder) {
                 player.closeInventory();
             }
         }
@@ -229,7 +229,7 @@ public final class ModuleGui implements Listener {
         if (inventory == null) {
             return null;
         }
-        InventoryHolder holder = inventory.getHolder(false);
+        InventoryHolder holder = Guis.holder(inventory);
         return holder instanceof Holder h ? h : null;
     }
 
@@ -282,7 +282,7 @@ public final class ModuleGui implements Listener {
     }
 
     private void handleClick(Player player, Holder holder, int slot, boolean shift) {
-        if (!player.isOnline() || player.getOpenInventory().getTopInventory().getHolder(false) != holder) {
+        if (!player.isOnline() || Guis.openHolder(player) != holder) {
             return;
         }
         Minion minion = plugin.minions().get(holder.minionId);

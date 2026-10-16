@@ -62,7 +62,7 @@ public final class MinionGui implements Listener {
         render(minion, holder);
         player.openInventory(inventory);
         // Rejestrujemy widok tylko, jeśli inventory faktycznie się otworzyło (inny plugin mógł to anulować).
-        if (player.getOpenInventory().getTopInventory().getHolder(false) == holder) {
+        if (Guis.openHolder(player) == holder) {
             viewers.computeIfAbsent(minion.id(), k -> new HashSet<>()).add(holder);
         }
     }
@@ -235,7 +235,7 @@ public final class MinionGui implements Listener {
         }
         for (MinionGuiHolder holder : set) {
             Player player = Bukkit.getPlayer(holder.viewer());
-            if (player != null && player.getOpenInventory().getTopInventory().getHolder(false) == holder) {
+            if (player != null && Guis.openHolder(player) == holder) {
                 player.closeInventory();
             }
         }
@@ -253,7 +253,7 @@ public final class MinionGui implements Listener {
         if (inventory == null) {
             return null;
         }
-        InventoryHolder holder = inventory.getHolder(false);
+        InventoryHolder holder = Guis.holder(inventory);
         return holder instanceof MinionGuiHolder minionHolder ? minionHolder : null;
     }
 
@@ -313,7 +313,7 @@ public final class MinionGui implements Listener {
     }
 
     private void handleClick(Player player, MinionGuiHolder holder, int slot) {
-        if (!player.isOnline() || player.getOpenInventory().getTopInventory().getHolder(false) != holder) {
+        if (!player.isOnline() || Guis.openHolder(player) != holder) {
             return;
         }
         Minion minion = plugin.minions().get(holder.minionId());
